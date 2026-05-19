@@ -6,9 +6,14 @@ export async function createSignalWireCall(config, input) {
   const to = input.to || config.signalWire.defaultTo;
 
   const callbackBase = input.publicBaseUrl || config.publicBaseUrl;
-  const url = input.url || `${callbackBase}/webhooks/signalwire/voice`;
+  const url =
+    input.url ||
+    config.signalWire.voiceWebhookUrl ||
+    `${callbackBase}/webhooks/signalwire/voice`;
   const statusCallback =
-    input.statusCallback || `${callbackBase}/webhooks/signalwire/status`;
+    input.statusCallback ||
+    config.signalWire.statusWebhookUrl ||
+    `${callbackBase}/webhooks/signalwire/status`;
 
   const params = new URLSearchParams({
     To: to,

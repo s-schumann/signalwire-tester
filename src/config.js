@@ -37,6 +37,8 @@ export function readConfig(env = process.env) {
       token: env.SIGNALWIRE_TOKEN || "",
       from: env.SIGNALWIRE_FROM || "",
       defaultTo: env.DEFAULT_TO || "",
+      voiceWebhookUrl: env.SIGNALWIRE_VOICE_WEBHOOK_URL || "",
+      statusWebhookUrl: env.SIGNALWIRE_STATUS_WEBHOOK_URL || "",
       testTimeoutMs: numberFromEnv(env.TEST_TIMEOUT_MS, 120000),
       sayMessage:
         env.SIGNALWIRE_SAY_MESSAGE ||
@@ -68,8 +70,17 @@ export function requireSignalWireConfig(config, overrides = {}) {
     missing.push("to or DEFAULT_TO");
   }
 
-  if (!config.publicBaseUrl && !overrides.statusCallback && !overrides.url) {
-    missing.push("PUBLIC_BASE_URL or explicit callback URLs");
+  const hasVoiceWebhook =
+    overrides.url || config.signalWire.voiceWebhookUrl || config.publicBaseUrl;
+  const hasStatusWebhook =
+    overrides.statusCallback ||
+    config.signalWire.statusWebhookUrl ||
+    config.publicBaseUrl;
+
+  if (!hasVoiceWebhook || !hasStatusWebhook) {
+    missing.push(
+      "PUBLIC_BASE_URL or SIGNALWIRE_VOICE_WEBHOOK_URL and SIGNALWIRE_STATUS_WEBHOOK_URL",
+    );
   }
 
   return missing;

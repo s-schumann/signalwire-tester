@@ -356,6 +356,46 @@ test("Synchronous round-trip check can skip waiting for Placetel webhooks by que
   }
 });
 
+test("Round-trip test appends test ID to configured SignalWire callback URLs", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+    SIGNALWIRE_VOICE_WEBHOOK_URL: "https://proxy.example/voice?source=monitor",
+    SIGNALWIRE_STATUS_WEBHOOK_URL: "https://proxy.example/status?source=monitor",
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ sid: "SW-CALLBACKS", status: "queued" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const created = await request("/tests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const createdBody = await created.json();
+
+    assert.equal(
+      createdBody.test.signalWireRequest.url,
+      `https://proxy.example/voice?source=monitor&test_id=${createdBody.test.id}`,
+    );
+    assert.equal(
+      createdBody.test.signalWireRequest.statusCallback,
+      `https://proxy.example/status?source=monitor&test_id=${createdBody.test.id}`,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 function createTestRequest(env) {
   return createTestRequestWithStore(env).request;
 }

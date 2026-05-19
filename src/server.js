@@ -215,6 +215,8 @@ function serviceInfo(config) {
           waitForPlacetelWebhook: "Optional override. Use false when this tester cannot receive Placetel webhooks.",
           to: "Optional Placetel destination override. Default: DEFAULT_TO.",
           from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
+          url: "Optional SignalWire voice webhook override. Default: SIGNALWIRE_VOICE_WEBHOOK_URL or PUBLIC_BASE_URL.",
+          statusCallback: "Optional SignalWire status webhook override. Default: SIGNALWIRE_STATUS_WEBHOOK_URL or PUBLIC_BASE_URL.",
         },
         responses: {
           200: {
@@ -269,6 +271,8 @@ function serviceInfo(config) {
         body: {
           to: "Optional Placetel destination override. Default: DEFAULT_TO.",
           from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
+          url: "Optional SignalWire voice webhook override. Default: SIGNALWIRE_VOICE_WEBHOOK_URL or PUBLIC_BASE_URL.",
+          statusCallback: "Optional SignalWire status webhook override. Default: SIGNALWIRE_STATUS_WEBHOOK_URL or PUBLIC_BASE_URL.",
           timeoutMs: "Optional test timeout override.",
           waitForPlacetelWebhook: "Optional override. Use false when this tester cannot receive Placetel webhooks.",
         },
@@ -400,6 +404,8 @@ function serviceInfo(config) {
       signalWireProjectId: Boolean(config.signalWire.projectId),
       signalWireToken: Boolean(config.signalWire.token),
       signalWireFrom: Boolean(config.signalWire.from),
+      signalWireVoiceWebhookUrl: Boolean(config.signalWire.voiceWebhookUrl),
+      signalWireStatusWebhookUrl: Boolean(config.signalWire.statusWebhookUrl),
       placetelSharedSecret: Boolean(config.placetel.sharedSecret),
       waitForPlacetelWebhook: config.placetel.waitForWebhook,
       placetelAction: config.placetel.action,
@@ -430,6 +436,14 @@ async function startRoundTripTest({ body, config, store }) {
   }
 
   const callbackBase = body.publicBaseUrl || config.publicBaseUrl;
+  const voiceWebhookUrl =
+    body.url ||
+    config.signalWire.voiceWebhookUrl ||
+    `${callbackBase}/webhooks/signalwire/voice`;
+  const statusWebhookUrl =
+    body.statusCallback ||
+    config.signalWire.statusWebhookUrl ||
+    `${callbackBase}/webhooks/signalwire/status`;
   const test = store.createTest({
     to: body.to || config.signalWire.defaultTo,
     from: body.from || config.signalWire.from,
@@ -442,12 +456,8 @@ async function startRoundTripTest({ body, config, store }) {
 
   const result = await createSignalWireCall(config, {
     ...body,
-    statusCallback:
-      body.statusCallback ||
-      `${callbackBase}/webhooks/signalwire/status?test_id=${test.id}`,
-    url:
-      body.url ||
-      `${callbackBase}/webhooks/signalwire/voice?test_id=${test.id}`,
+    statusCallback: appendQuery(statusWebhookUrl, "test_id", test.id),
+    url: appendQuery(voiceWebhookUrl, "test_id", test.id),
   });
 
   const callSid = result.response.sid || result.response.call_sid;
@@ -496,6 +506,12 @@ function booleanFromInput(value, fallback) {
   if (value === undefined || value === "") return fallback;
   if (typeof value === "boolean") return value;
   return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+function appendQuery(rawUrl, key, value) {
+  const url = new URL(rawUrl);
+  url.searchParams.set(key, value);
+  return url.toString();
 }
 
 function requiresApiKey(config, req, url) {

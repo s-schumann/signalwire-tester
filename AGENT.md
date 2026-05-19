@@ -42,6 +42,8 @@ PORT=3000
 HOST=0.0.0.0
 API_KEY=change-me
 PUBLIC_BASE_URL=https://your-public-host.example
+SIGNALWIRE_VOICE_WEBHOOK_URL=
+SIGNALWIRE_STATUS_WEBHOOK_URL=
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
 SIGNALWIRE_TOKEN=your-token
@@ -58,6 +60,8 @@ PLACETEL_ACTION=hangup
 ```txt
 {PUBLIC_BASE_URL}/webhooks/placetel
 ```
+
+If SignalWire callbacks route through a proxy, set `SIGNALWIRE_VOICE_WEBHOOK_URL` and `SIGNALWIRE_STATUS_WEBHOOK_URL` explicitly. Round-trip tests append `test_id` to both URLs.
 
 When `API_KEY` is configured, non-webhook API endpoints require one of:
 

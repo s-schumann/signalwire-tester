@@ -21,6 +21,8 @@ cp .env.example .env
 Fill in:
 
 - `PUBLIC_BASE_URL`: the public HTTPS URL that SignalWire and Placetel can reach, for example an ngrok URL.
+- `SIGNALWIRE_VOICE_WEBHOOK_URL`: optional explicit voice/control callback URL for SignalWire. Use this when callbacks must route through a proxy.
+- `SIGNALWIRE_STATUS_WEBHOOK_URL`: optional explicit status callback URL for SignalWire. Use this when callbacks must route through a proxy.
 - `API_KEY`: optional shared key for non-webhook API endpoints.
 - `SIGNALWIRE_BASE_URL`: the full SignalWire LaML API base URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`. This may point at a proxy.
 - `SIGNALWIRE_PROJECT_ID`
@@ -46,6 +48,22 @@ Expose it publicly, then configure Placetel External APIs to call:
 https://your-public-url/webhooks/placetel
 ```
 
+SignalWire callback URLs default to:
+
+```txt
+{PUBLIC_BASE_URL}/webhooks/signalwire/voice
+{PUBLIC_BASE_URL}/webhooks/signalwire/status
+```
+
+If SignalWire callbacks must go through a proxy, set them explicitly:
+
+```env
+SIGNALWIRE_VOICE_WEBHOOK_URL=https://proxy.example/signalwire/voice
+SIGNALWIRE_STATUS_WEBHOOK_URL=https://proxy.example/signalwire/status
+```
+
+Round-trip tests append `test_id` to both URLs automatically.
+
 ## Docker
 
 Build the image:
@@ -67,6 +85,8 @@ PORT=3000
 HOST=0.0.0.0
 API_KEY=change-me
 PUBLIC_BASE_URL=https://your-public-host.example
+SIGNALWIRE_VOICE_WEBHOOK_URL=
+SIGNALWIRE_STATUS_WEBHOOK_URL=
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
 SIGNALWIRE_TOKEN=your-token
