@@ -55,7 +55,7 @@ export class EventStore {
       expected: {
         signalWireCallCreated: false,
         signalWireStatus: false,
-        signalWireCompleted: false,
+        signalWireTerminal: false,
         placetelIncomingCall: false,
         placetelHungUp: false,
       },
@@ -150,7 +150,7 @@ export class EventStore {
     const expected = {
       signalWireCallCreated: Boolean(test.signalWireCallSid),
       signalWireStatus: false,
-      signalWireCompleted: false,
+      signalWireTerminal: false,
       placetelIncomingCall: false,
       placetelHungUp: false,
     };
@@ -163,8 +163,8 @@ export class EventStore {
           event.payload.CallState ||
           event.payload.call_status ||
           event.payload.call_state;
-        if (String(status).toLowerCase() === "completed") {
-          expected.signalWireCompleted = true;
+        if (isSignalWireTerminalStatus(status)) {
+          expected.signalWireTerminal = true;
         }
       }
 
@@ -247,4 +247,10 @@ function phoneCandidates(value) {
   }
 
   return [...candidates];
+}
+
+function isSignalWireTerminalStatus(status) {
+  return ["completed", "busy", "no-answer", "failed", "canceled"].includes(
+    String(status || "").toLowerCase(),
+  );
 }

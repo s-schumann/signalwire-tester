@@ -49,7 +49,7 @@ This is the normal end-to-end check. It initiates a SignalWire call and marks th
 
 - SignalWire call created.
 - At least one SignalWire status webhook.
-- SignalWire `completed` status webhook.
+- SignalWire terminal status webhook: `completed`, `busy`, `no-answer`, `failed`, or `canceled`.
 - Placetel `IncomingCall` webhook.
 - Placetel `HungUp` webhook.
 
