@@ -477,7 +477,23 @@ function sendXml(res, status, xml) {
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   const server = http.createServer(createApp(config, store));
-  server.listen(config.port, () => {
-    console.log(`SignalWire/Placetel tester listening on http://localhost:${config.port}`);
+  server.listen(config.port, config.host, () => {
+    console.log(
+      `SignalWire/Placetel tester listening on http://${config.host}:${config.port}`,
+    );
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("Received SIGTERM, shutting down HTTP server.");
+    server.close(() => {
+      process.exit(0);
+    });
+  });
+
+  process.on("SIGINT", () => {
+    console.log("Received SIGINT, shutting down HTTP server.");
+    server.close(() => {
+      process.exit(0);
+    });
   });
 }

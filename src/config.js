@@ -23,10 +23,12 @@ export function loadDotEnv(path = join(root, ".env"), env = process.env) {
 
 export function readConfig(env = process.env) {
   const port = numberFromEnv(env.PORT, 3000);
+  const host = env.HOST || "0.0.0.0";
   const publicBaseUrl = cleanBaseUrl(env.PUBLIC_BASE_URL || "");
 
   return {
     port,
+    host,
     publicBaseUrl,
     signalWire: {
       baseUrl: cleanBaseUrl(env.SIGNALWIRE_BASE_URL || ""),

@@ -39,6 +39,7 @@ Required deployment variables:
 
 ```env
 PORT=3000
+HOST=0.0.0.0
 PUBLIC_BASE_URL=https://your-public-host.example
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id

@@ -36,7 +36,7 @@ If Placetel has a shared secret configured in External APIs, set `PLACETEL_SHARE
 npm start
 ```
 
-The service listens on `http://localhost:3000` by default.
+The service listens on `http://0.0.0.0:3000` by default, which is suitable for Docker and most remote platforms.
 
 Expose it publicly, then configure Placetel External APIs to call:
 
@@ -62,6 +62,7 @@ For a remote deployment, provide these environment variables through your platfo
 
 ```env
 PORT=3000
+HOST=0.0.0.0
 PUBLIC_BASE_URL=https://your-public-host.example
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
