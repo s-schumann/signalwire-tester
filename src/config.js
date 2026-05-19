@@ -34,6 +34,7 @@ export function readConfig(env = process.env) {
       token: env.SIGNALWIRE_TOKEN || "",
       from: env.SIGNALWIRE_FROM || "",
       defaultTo: env.DEFAULT_TO || "",
+      testTimeoutMs: numberFromEnv(env.TEST_TIMEOUT_MS, 120000),
       sayMessage:
         env.SIGNALWIRE_SAY_MESSAGE ||
         "SignalWire webhook test connected successfully.",

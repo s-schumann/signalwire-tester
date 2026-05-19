@@ -42,6 +42,70 @@ test("Placetel webhook accepts valid HMAC and returns XML", async () => {
   assert.match(await response.text(), /<Reject reason="busy" \/>/);
 });
 
+test("Round-trip test fails until all required callback types are present", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+4915228817386",
+    DEFAULT_TO: "+493023125000",
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ sid: "SW123", status: "queued" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const created = await request("/tests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const createdBody = await created.json();
+
+    assert.equal(created.status, 201);
+    assert.equal(createdBody.test.status, "pending");
+    assert.deepEqual(createdBody.test.missing, [
+      "signalWireStatus",
+      "signalWireCompleted",
+      "placetelIncomingCall",
+      "placetelHungUp",
+    ]);
+
+    await request(`/webhooks/signalwire/status?test_id=${createdBody.test.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=SW123&CallStatus=completed",
+    });
+    await request("/webhooks/placetel", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:
+        "call_id=PL123&direction=in&event=IncomingCall&from=015226453669&to=030515659470",
+    });
+    await request("/webhooks/placetel", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:
+        "call_id=PL123&direction=in&event=HungUp&from=015226453669&to=030515659470",
+    });
+
+    const listed = await request("/tests");
+    const listedBody = await listed.json();
+
+    assert.equal(listedBody.tests[0].id, createdBody.test.id);
+    assert.equal(listedBody.tests[0].status, "ok");
+    assert.equal(listedBody.tests[0].ok, true);
+    assert.deepEqual(listedBody.tests[0].missing, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 function createTestRequest(env) {
   const config = readConfig({ PORT: "0", ...env });
   const app = createApp(config, new EventStore());

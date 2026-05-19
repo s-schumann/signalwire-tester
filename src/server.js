@@ -38,6 +38,65 @@ export function createApp(config, store) {
         return send(res, 200, { calls: store.listCalls() });
       }
 
+      if (req.method === "GET" && url.pathname === "/tests") {
+        return send(res, 200, { tests: store.listTests() });
+      }
+
+      if (req.method === "GET" && url.pathname.startsWith("/tests/")) {
+        const testId = url.pathname.slice("/tests/".length);
+        const test = store.getTest(testId);
+        if (!test) return send(res, 404, { error: "Test not found" });
+        return send(res, 200, { test });
+      }
+
+      if (req.method === "POST" && url.pathname === "/tests") {
+        const input = await readRequestBody(req);
+        const body = parseBody(input);
+        const missing = requireSignalWireConfig(config, body);
+        if (missing.length) {
+          return send(res, 400, {
+            error: "Missing SignalWire configuration",
+            missing,
+          });
+        }
+
+        const callbackBase = body.publicBaseUrl || config.publicBaseUrl;
+        const test = store.createTest({
+          to: body.to || config.signalWire.defaultTo,
+          from: body.from || config.signalWire.from,
+          timeoutMs: Number.parseInt(body.timeoutMs || config.signalWire.testTimeoutMs, 10),
+        });
+
+        const result = await createSignalWireCall(config, {
+          ...body,
+          statusCallback:
+            body.statusCallback ||
+            `${callbackBase}/webhooks/signalwire/status?test_id=${test.id}`,
+          url:
+            body.url ||
+            `${callbackBase}/webhooks/signalwire/voice?test_id=${test.id}`,
+        });
+
+        const callSid = result.response.sid || result.response.call_sid;
+        if (callSid) {
+          store.upsertCall(callSid, {
+            provider: "signalwire",
+            request: result.request,
+            response: result.response,
+            testId: test.id,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        store.markTestCallCreated(test.id, result);
+        await store.record("signalwire.call.created", result.response, {
+          request: result.request,
+          testId: test.id,
+        });
+
+        return send(res, 201, { test: store.getTest(test.id) });
+      }
+
       if (req.method === "POST" && url.pathname === "/calls") {
         const input = await readRequestBody(req);
         const body = parseBody(input);
@@ -70,6 +129,7 @@ export function createApp(config, store) {
         const payload = parseBody(input);
         const event = await store.record("signalwire.status", payload, {
           headers: selectedHeaders(req.headers),
+          testId: url.searchParams.get("test_id") || undefined,
         });
         return send(res, 200, { ok: true, eventId: event.id });
       }
@@ -79,6 +139,7 @@ export function createApp(config, store) {
         const payload = parseBody(input);
         await store.record("signalwire.voice", payload, {
           headers: selectedHeaders(req.headers),
+          testId: url.searchParams.get("test_id") || undefined,
         });
         return sendXml(res, 200, signalWireVoiceXml(config.signalWire.sayMessage));
       }
@@ -116,6 +177,8 @@ function serviceInfo(config) {
     endpoints: {
       health: "GET /health",
       initiateCall: "POST /calls",
+      startRoundTripTest: "POST /tests",
+      listRoundTripTests: "GET /tests",
       listCalls: "GET /calls",
       listEvents: "GET /events?limit=100",
       signalWireVoice: "POST /webhooks/signalwire/voice",

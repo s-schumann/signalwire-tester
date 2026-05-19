@@ -5,10 +5,11 @@ Small webhook-first test service for end-to-end SignalWire outbound calls into a
 It provides:
 
 - `POST /calls` to initiate a SignalWire Compatibility API call.
+- `POST /tests` to initiate a full round-trip test and evaluate required callbacks.
 - `POST /webhooks/signalwire/status` to receive all requested SignalWire call status callbacks.
 - `POST /webhooks/signalwire/voice` to return LaML/TwiML-compatible XML when the SignalWire call is answered.
 - `POST /webhooks/placetel` to receive Placetel Call Control/Notify API events and return Placetel XML control instructions.
-- `GET /events` and `GET /calls` to inspect what happened during a test run.
+- `GET /tests`, `GET /events`, and `GET /calls` to inspect what happened during a test run.
 
 ## Setup
 
@@ -24,6 +25,7 @@ Fill in:
 - `SIGNALWIRE_TOKEN`
 - `SIGNALWIRE_FROM`: a SignalWire-owned caller ID in E.164 format.
 - `DEFAULT_TO`: the Placetel number to call, in E.164 format.
+- `TEST_TIMEOUT_MS`: how long a round-trip test may wait before it is considered failed.
 
 If Placetel has a shared secret configured in External APIs, set `PLACETEL_SHARED_SECRET` so incoming Placetel requests are verified against `X-PLACETEL-SIGNATURE`.
 
@@ -41,7 +43,43 @@ Expose it publicly, then configure Placetel External APIs to call:
 https://your-public-url/webhooks/placetel
 ```
 
-## Start A Test Call
+## Start A Round-Trip Test
+
+This is the normal end-to-end check. It initiates a SignalWire call and marks the run `ok` only after all required callbacks arrive:
+
+- SignalWire call created.
+- At least one SignalWire status webhook.
+- SignalWire `completed` status webhook.
+- Placetel `IncomingCall` webhook.
+- Placetel `HungUp` webhook.
+
+With defaults from `.env`:
+
+```sh
+curl -X POST http://localhost:3000/tests \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+With explicit call values:
+
+```sh
+curl -X POST http://localhost:3000/tests \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "to": "+492214710000",
+    "from": "+493023125001"
+  }'
+```
+
+Inspect test status:
+
+```sh
+curl http://localhost:3000/tests
+curl http://localhost:3000/tests/{test_id}
+```
+
+## Start A Raw Call
 
 With defaults from `.env`:
 
@@ -100,6 +138,7 @@ PLACETEL_FORWARD_RINGTIME=30
 ## Inspect Results
 
 ```sh
+curl http://localhost:3000/tests
 curl http://localhost:3000/events
 curl http://localhost:3000/calls
 ```
