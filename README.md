@@ -22,7 +22,7 @@ Fill in:
 
 - `PUBLIC_BASE_URL`: the public HTTPS URL that SignalWire and Placetel can reach, for example an ngrok URL.
 - `API_KEY`: optional shared key for non-webhook API endpoints.
-- `SIGNALWIRE_BASE_URL`: your SignalWire space URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`.
+- `SIGNALWIRE_BASE_URL`: the full SignalWire LaML API base URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`. This may point at a proxy.
 - `SIGNALWIRE_PROJECT_ID`
 - `SIGNALWIRE_TOKEN`
 - `SIGNALWIRE_FROM`: a SignalWire-owned caller ID in E.164 format.
@@ -247,12 +247,19 @@ curl http://localhost:3000/calls
 
 Events are also appended to `data/events.jsonl`.
 
+The service also writes simple interaction logs to stdout for container logs, for example:
+
+```txt
+[2026-05-19T10:54:06.979Z] Starting synchronous round-trip check {"to":"+493023125000","from":"+496990009000"}
+[2026-05-19T10:54:06.980Z] Received Placetel webhook {"event":"IncomingCall","from":"069200602148","to":"030515659470"}
+```
+
 ## Notes
 
 SignalWire call creation uses Basic auth with `project_id:token` and posts to:
 
 ```txt
-{SIGNALWIRE_BASE_URL}/api/laml/2010-04-01/Accounts/{SIGNALWIRE_PROJECT_ID}/Calls.json
+{SIGNALWIRE_BASE_URL}/Accounts/{SIGNALWIRE_PROJECT_ID}/Calls.json
 ```
 
 Placetel sends `application/x-www-form-urlencoded` POST requests and, when a shared secret is configured, signs the raw payload with HMAC-SHA256 in the `X-PLACETEL-SIGNATURE` header.

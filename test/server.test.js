@@ -75,7 +75,7 @@ test("API key can be supplied through X-API-Key or query parameter", async () =>
 test("Round-trip test fails until all required callback types are present", async () => {
   const request = createTestRequest({
     PUBLIC_BASE_URL: "https://tester.example",
-    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
     SIGNALWIRE_PROJECT_ID: "project-id",
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+4915228817386",
@@ -139,7 +139,7 @@ test("Round-trip test fails until all required callback types are present", asyn
 test("Round-trip test treats SignalWire busy as terminal for hangup flows", async () => {
   const request = createTestRequest({
     PUBLIC_BASE_URL: "https://tester.example",
-    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
     SIGNALWIRE_PROJECT_ID: "project-id",
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
@@ -192,7 +192,7 @@ test("Round-trip test treats SignalWire busy as terminal for hangup flows", asyn
 test("Synchronous round-trip check returns 200 when callbacks complete before timeout", async () => {
   const { request, store } = createTestRequestWithStore({
     PUBLIC_BASE_URL: "https://tester.example",
-    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
     SIGNALWIRE_PROJECT_ID: "project-id",
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
@@ -243,7 +243,7 @@ test("Synchronous round-trip check returns 200 when callbacks complete before ti
 test("Synchronous round-trip check returns 503 when callbacks do not complete", async () => {
   const request = createTestRequest({
     PUBLIC_BASE_URL: "https://tester.example",
-    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
     SIGNALWIRE_PROJECT_ID: "project-id",
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",

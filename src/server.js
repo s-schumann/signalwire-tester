@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import http from "node:http";
 import { URL } from "node:url";
 import { loadDotEnv, readConfig, requireSignalWireConfig } from "./config.js";
+import { logInteraction } from "./logger.js";
 import { createSignalWireCall } from "./signalwire.js";
 import { EventStore } from "./store.js";
 import { placetelControlXml, signalWireVoiceXml } from "./xml.js";
@@ -31,12 +32,23 @@ export function createApp(config, store) {
 
       if (req.method === "GET" && url.pathname === "/checks/round-trip") {
         const body = Object.fromEntries(url.searchParams.entries());
+        logInteraction("Starting synchronous round-trip check", {
+          to: body.to || config.signalWire.defaultTo,
+          from: body.from || config.signalWire.from,
+          waitTimeoutMs: body.waitTimeoutMs || body.timeoutMs || config.signalWire.testTimeoutMs,
+        });
         const result = await startRoundTripTest({ body, config, store });
         const waitTimeoutMs = Number.parseInt(
           body.waitTimeoutMs || body.timeoutMs || config.signalWire.testTimeoutMs,
           10,
         );
         const test = await waitForTest(store, result.test.id, waitTimeoutMs);
+        logInteraction("Synchronous round-trip check finished", {
+          testId: test.id,
+          status: test.status,
+          ok: test.ok,
+          missing: test.missing,
+        });
         return send(res, test.ok ? 200 : 503, {
           ok: test.ok,
           status: test.status,
@@ -69,6 +81,10 @@ export function createApp(config, store) {
       if (req.method === "POST" && url.pathname === "/tests") {
         const input = await readRequestBody(req);
         const body = parseBody(input);
+        logInteraction("Starting asynchronous round-trip test", {
+          to: body.to || config.signalWire.defaultTo,
+          from: body.from || config.signalWire.from,
+        });
         const result = await startRoundTripTest({ body, config, store });
         return send(res, 201, result);
       }
@@ -76,6 +92,10 @@ export function createApp(config, store) {
       if (req.method === "POST" && url.pathname === "/calls") {
         const input = await readRequestBody(req);
         const body = parseBody(input);
+        logInteraction("Creating raw SignalWire call", {
+          to: body.to || config.signalWire.defaultTo,
+          from: body.from || config.signalWire.from,
+        });
         const missing = requireSignalWireConfig(config, body);
         if (missing.length) {
           return send(res, 400, {
@@ -97,12 +117,22 @@ export function createApp(config, store) {
         await store.record("signalwire.call.created", result.response, {
           request: result.request,
         });
+        logInteraction("Raw SignalWire call created", {
+          callSid: callSid || result.response.sid || result.response.call_sid,
+          to: result.request.to,
+          from: result.request.from,
+        });
         return send(res, 201, result);
       }
 
       if (req.method === "POST" && url.pathname === "/webhooks/signalwire/status") {
         const input = await readRequestBody(req);
         const payload = parseBody(input);
+        logInteraction("Received SignalWire status webhook", {
+          testId: url.searchParams.get("test_id") || undefined,
+          callSid: payload.CallSid || payload.call_sid,
+          status: payload.CallStatus || payload.call_status,
+        });
         const event = await store.record("signalwire.status", payload, {
           headers: selectedHeaders(req.headers),
           testId: url.searchParams.get("test_id") || undefined,
@@ -113,6 +143,11 @@ export function createApp(config, store) {
       if (req.method === "POST" && url.pathname === "/webhooks/signalwire/voice") {
         const input = await readRequestBody(req);
         const payload = parseBody(input);
+        logInteraction("Received SignalWire voice webhook", {
+          testId: url.searchParams.get("test_id") || undefined,
+          callSid: payload.CallSid || payload.call_sid,
+          status: payload.CallStatus || payload.call_status,
+        });
         await store.record("signalwire.voice", payload, {
           headers: selectedHeaders(req.headers),
           testId: url.searchParams.get("test_id") || undefined,
@@ -124,6 +159,7 @@ export function createApp(config, store) {
         const input = await readRequestBody(req);
         const signature = req.headers["x-placetel-signature"] || "";
         if (!isValidPlacetelSignature(config.placetel.sharedSecret, input.raw, signature)) {
+          logInteraction("Rejected Placetel webhook with invalid signature");
           await store.record("placetel.signature.invalid", parseBody(input), {
             headers: selectedHeaders(req.headers),
           });
@@ -131,6 +167,12 @@ export function createApp(config, store) {
         }
 
         const payload = parseBody(input);
+        logInteraction("Received Placetel webhook", {
+          callId: payload.call_id,
+          event: payload.event,
+          from: payload.from,
+          to: payload.to,
+        });
         await store.record("placetel.webhook", payload, {
           headers: selectedHeaders(req.headers),
         });
@@ -402,6 +444,12 @@ async function startRoundTripTest({ body, config, store }) {
   });
 
   const callSid = result.response.sid || result.response.call_sid;
+  logInteraction("SignalWire call created for round-trip test", {
+    testId: test.id,
+    callSid,
+    to: result.request.to,
+    from: result.request.from,
+  });
   if (callSid) {
     store.upsertCall(callSid, {
       provider: "signalwire",

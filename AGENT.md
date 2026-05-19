@@ -101,6 +101,8 @@ Events are stored in memory and appended to:
 data/events.jsonl
 ```
 
+The service writes simple interaction logs to stdout for container logs: test start/finish, raw call creation, SignalWire webhooks, and Placetel webhooks. Secrets are redacted by key name.
+
 `data/` is gitignored. For Docker deployments, mount `/app/data` if logs must survive restarts.
 
 ## Docker

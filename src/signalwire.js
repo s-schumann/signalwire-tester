@@ -35,7 +35,7 @@ export async function createSignalWireCall(config, input) {
     }
   }
 
-  const endpoint = `${baseUrl}/api/laml/2010-04-01/Accounts/${projectId}/Calls.json`;
+  const endpoint = `${baseUrl}/Accounts/${projectId}/Calls.json`;
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
