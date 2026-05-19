@@ -29,6 +29,7 @@ export function readConfig(env = process.env) {
   return {
     port,
     host,
+    apiKey: env.API_KEY || "",
     publicBaseUrl,
     signalWire: {
       baseUrl: cleanBaseUrl(env.SIGNALWIRE_BASE_URL || ""),
@@ -50,10 +51,6 @@ export function readConfig(env = process.env) {
       groupId: env.PLACETEL_GROUP_ID || "",
       routingPlanId: env.PLACETEL_ROUTING_PLAN_ID || "",
       queueId: env.PLACETEL_QUEUE_ID || "",
-    },
-    admin: {
-      username: env.ADMIN_USERNAME || "",
-      password: env.ADMIN_PASSWORD || "",
     },
   };
 }

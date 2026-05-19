@@ -40,6 +40,7 @@ Required deployment variables:
 ```env
 PORT=3000
 HOST=0.0.0.0
+API_KEY=change-me
 PUBLIC_BASE_URL=https://your-public-host.example
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
@@ -56,6 +57,14 @@ PLACETEL_ACTION=hangup
 ```txt
 {PUBLIC_BASE_URL}/webhooks/placetel
 ```
+
+When `API_KEY` is configured, non-webhook API endpoints require one of:
+
+- `Authorization: Bearer <API_KEY>`
+- `X-API-Key: <API_KEY>`
+- `api_key=<API_KEY>` query parameter
+
+Webhook endpoints and `GET /health` intentionally remain public.
 
 ## Key Endpoints
 
@@ -122,6 +131,7 @@ Docker was not available in the local Codex environment when this file was writt
 
 - Keep the app dependency-free unless there is a clear need.
 - Do not expose secrets in `GET /`; represent configured secrets only as booleans.
+- Keep inbound webhooks unauthenticated by `API_KEY`; Placetel authentication is HMAC-based.
 - Do not commit `.env` or `data/`.
 - Use Node's built-in test runner.
 - Prefer focused tests around webhook correlation and endpoint response codes.

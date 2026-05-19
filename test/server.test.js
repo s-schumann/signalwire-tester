@@ -42,6 +42,36 @@ test("Placetel webhook accepts valid HMAC and returns XML", async () => {
   assert.match(await response.text(), /<Reject reason="busy" \/>/);
 });
 
+test("API key protects non-webhook endpoints when configured", async () => {
+  const request = createTestRequest({ API_KEY: "secret-key" });
+
+  const unauthenticated = await request("/tests");
+  const webhook = await request("/webhooks/signalwire/status", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "CallSid=abc&CallStatus=completed",
+  });
+  const authenticated = await request("/tests", {
+    headers: { Authorization: "Bearer secret-key" },
+  });
+
+  assert.equal(unauthenticated.status, 401);
+  assert.equal(webhook.status, 200);
+  assert.equal(authenticated.status, 200);
+});
+
+test("API key can be supplied through X-API-Key or query parameter", async () => {
+  const request = createTestRequest({ API_KEY: "secret-key" });
+
+  const headerResponse = await request("/", {
+    headers: { "X-API-Key": "secret-key" },
+  });
+  const queryResponse = await request("/tests?api_key=secret-key");
+
+  assert.equal(headerResponse.status, 200);
+  assert.equal(queryResponse.status, 200);
+});
+
 test("Round-trip test fails until all required callback types are present", async () => {
   const request = createTestRequest({
     PUBLIC_BASE_URL: "https://tester.example",

@@ -15,9 +15,9 @@ export function createApp(config, store) {
     try {
       const url = new URL(req.url, "http://localhost");
 
-      if (requiresAdminAuth(config, url.pathname) && !isAuthorized(config, req)) {
+      if (requiresApiKey(config, req, url) && !isApiKeyAuthorized(config, req, url)) {
         return send(res, 401, { error: "Unauthorized" }, {
-          "WWW-Authenticate": 'Basic realm="signalwire-placetel-tester"',
+          "WWW-Authenticate": 'Bearer realm="signalwire-placetel-tester"',
         });
       }
 
@@ -164,6 +164,7 @@ function serviceInfo(config) {
       synchronousRoundTripCheck: endpointDoc({
         method: "GET",
         path: "/checks/round-trip",
+        auth: "Required when API_KEY is configured.",
         description:
           "Starts a real SignalWire call, waits for SignalWire and Placetel callbacks, and returns one monitor-friendly result.",
         query: {
@@ -196,6 +197,7 @@ function serviceInfo(config) {
       initiateCall: endpointDoc({
         method: "POST",
         path: "/calls",
+        auth: "Required when API_KEY is configured.",
         description:
           "Creates a raw SignalWire outbound call and logs callbacks, without pass/fail round-trip evaluation.",
         body: {
@@ -218,6 +220,7 @@ function serviceInfo(config) {
       startRoundTripTest: endpointDoc({
         method: "POST",
         path: "/tests",
+        auth: "Required when API_KEY is configured.",
         description:
           "Starts a real round-trip test and returns immediately with the initial test state.",
         body: {
@@ -234,6 +237,7 @@ function serviceInfo(config) {
       listRoundTripTests: endpointDoc({
         method: "GET",
         path: "/tests",
+        auth: "Required when API_KEY is configured.",
         description: "Lists in-memory round-trip tests, newest first.",
         responses: {
           200: {
@@ -244,6 +248,7 @@ function serviceInfo(config) {
       getRoundTripTest: endpointDoc({
         method: "GET",
         path: "/tests/{test_id}",
+        auth: "Required when API_KEY is configured.",
         description: "Returns one round-trip test by ID.",
         responses: {
           200: {
@@ -257,6 +262,7 @@ function serviceInfo(config) {
       listCalls: endpointDoc({
         method: "GET",
         path: "/calls",
+        auth: "Required when API_KEY is configured.",
         description: "Lists observed call records and attached events.",
         responses: {
           200: {
@@ -267,6 +273,7 @@ function serviceInfo(config) {
       listEvents: endpointDoc({
         method: "GET",
         path: "/events",
+        auth: "Required when API_KEY is configured.",
         description: "Lists recent webhook and call-creation events, newest first.",
         query: {
           limit: "Maximum event count. Default: 100.",
@@ -311,6 +318,30 @@ function serviceInfo(config) {
         },
       }),
     },
+    authentication: {
+      apiKeyConfigured: Boolean(config.apiKey),
+      protectedEndpoints: [
+        "GET /",
+        "GET /checks/round-trip",
+        "POST /calls",
+        "POST /tests",
+        "GET /tests",
+        "GET /tests/{test_id}",
+        "GET /calls",
+        "GET /events",
+      ],
+      acceptedMethods: [
+        "Authorization: Bearer <API_KEY>",
+        "X-API-Key: <API_KEY>",
+        "api_key=<API_KEY> query parameter",
+      ],
+      publicEndpoints: [
+        "GET /health",
+        "POST /webhooks/signalwire/status",
+        "POST /webhooks/signalwire/voice",
+        "POST /webhooks/placetel",
+      ],
+    },
     roundTripOkRequires: [
       "SignalWire call created",
       "At least one SignalWire status callback",
@@ -319,6 +350,7 @@ function serviceInfo(config) {
       "Placetel HungUp callback",
     ],
     configured: {
+      apiKey: Boolean(config.apiKey),
       publicBaseUrl: Boolean(config.publicBaseUrl),
       signalWireBaseUrl: Boolean(config.signalWire.baseUrl),
       signalWireProjectId: Boolean(config.signalWire.projectId),
@@ -330,12 +362,13 @@ function serviceInfo(config) {
   };
 }
 
-function endpointDoc({ method, path, description, query, body, responses }) {
+function endpointDoc({ method, path, description, auth, query, body, responses }) {
   return {
     method,
     path,
     usage: `${method} ${path}`,
     description,
+    ...(auth ? { auth } : {}),
     ...(query ? { query } : {}),
     ...(body ? { body } : {}),
     responses,
@@ -404,17 +437,29 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function requiresAdminAuth(config, path) {
-  if (!config.admin.username || !config.admin.password) return false;
-  return path === "/calls" || path === "/events";
+function requiresApiKey(config, req, url) {
+  if (!config.apiKey) return false;
+
+  const publicRoutes = [
+    ["GET", "/health"],
+    ["POST", "/webhooks/signalwire/status"],
+    ["POST", "/webhooks/signalwire/voice"],
+    ["POST", "/webhooks/placetel"],
+  ];
+
+  return !publicRoutes.some(
+    ([method, path]) => req.method === method && url.pathname === path,
+  );
 }
 
-function isAuthorized(config, req) {
+function isApiKeyAuthorized(config, req, url) {
   const header = req.headers.authorization || "";
-  if (!header.startsWith("Basic ")) return false;
-  const expected = `${config.admin.username}:${config.admin.password}`;
-  const actual = Buffer.from(header.slice("Basic ".length), "base64").toString("utf8");
-  return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+  const bearerToken = header.startsWith("Bearer ")
+    ? header.slice("Bearer ".length)
+    : "";
+  const supplied =
+    bearerToken || req.headers["x-api-key"] || url.searchParams.get("api_key") || "";
+  return safeEqual(String(config.apiKey), String(supplied));
 }
 
 async function readRequestBody(req) {

@@ -21,6 +21,7 @@ cp .env.example .env
 Fill in:
 
 - `PUBLIC_BASE_URL`: the public HTTPS URL that SignalWire and Placetel can reach, for example an ngrok URL.
+- `API_KEY`: optional shared key for non-webhook API endpoints.
 - `SIGNALWIRE_BASE_URL`: your SignalWire space URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`.
 - `SIGNALWIRE_PROJECT_ID`
 - `SIGNALWIRE_TOKEN`
@@ -63,6 +64,7 @@ For a remote deployment, provide these environment variables through your platfo
 ```env
 PORT=3000
 HOST=0.0.0.0
+API_KEY=change-me
 PUBLIC_BASE_URL=https://your-public-host.example
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
@@ -91,6 +93,34 @@ docker run --rm -p 3000:3000 --env-file .env \
 - query/body parameters
 - response status codes and example response bodies
 - current configuration booleans, with secrets represented only as `true` or `false`
+
+## API Authentication
+
+When `API_KEY` is set, non-webhook API endpoints require authentication:
+
+- `GET /`
+- `GET /checks/round-trip`
+- `POST /calls`
+- `POST /tests`
+- `GET /tests`
+- `GET /tests/{test_id}`
+- `GET /calls`
+- `GET /events`
+
+Webhook endpoints and `GET /health` remain public so SignalWire, Placetel, and platform health checks can reach them.
+
+Preferred header:
+
+```sh
+curl -H 'Authorization: Bearer change-me' http://localhost:3000/tests
+```
+
+Also supported:
+
+```sh
+curl -H 'X-API-Key: change-me' http://localhost:3000/tests
+curl 'http://localhost:3000/checks/round-trip?api_key=change-me&waitTimeoutMs=120000'
+```
 
 ## Start A Round-Trip Test
 
