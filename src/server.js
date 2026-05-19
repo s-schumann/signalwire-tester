@@ -212,6 +212,7 @@ function serviceInfo(config) {
         query: {
           waitTimeoutMs: "Maximum time to hold the HTTP response open. Default: TEST_TIMEOUT_MS.",
           timeoutMs: "Round-trip test timeout. Default: TEST_TIMEOUT_MS.",
+          waitForPlacetelWebhook: "Optional override. Use false when this tester cannot receive Placetel webhooks.",
           to: "Optional Placetel destination override. Default: DEFAULT_TO.",
           from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
         },
@@ -269,6 +270,7 @@ function serviceInfo(config) {
           to: "Optional Placetel destination override. Default: DEFAULT_TO.",
           from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
           timeoutMs: "Optional test timeout override.",
+          waitForPlacetelWebhook: "Optional override. Use false when this tester cannot receive Placetel webhooks.",
         },
         responses: {
           201: {
@@ -388,8 +390,8 @@ function serviceInfo(config) {
       "SignalWire call created",
       "At least one SignalWire status callback",
       "SignalWire terminal status: completed, busy, no-answer, failed, or canceled",
-      "Placetel IncomingCall callback",
-      "Placetel HungUp callback",
+      "Placetel IncomingCall callback when WAIT_FOR_PLACETEL_WEBHOOK=true",
+      "Placetel HungUp callback when WAIT_FOR_PLACETEL_WEBHOOK=true",
     ],
     configured: {
       apiKey: Boolean(config.apiKey),
@@ -399,6 +401,7 @@ function serviceInfo(config) {
       signalWireToken: Boolean(config.signalWire.token),
       signalWireFrom: Boolean(config.signalWire.from),
       placetelSharedSecret: Boolean(config.placetel.sharedSecret),
+      waitForPlacetelWebhook: config.placetel.waitForWebhook,
       placetelAction: config.placetel.action,
     },
   };
@@ -431,6 +434,10 @@ async function startRoundTripTest({ body, config, store }) {
     to: body.to || config.signalWire.defaultTo,
     from: body.from || config.signalWire.from,
     timeoutMs: Number.parseInt(body.timeoutMs || config.signalWire.testTimeoutMs, 10),
+    waitForPlacetelWebhook: booleanFromInput(
+      body.waitForPlacetelWebhook,
+      config.placetel.waitForWebhook,
+    ),
   });
 
   const result = await createSignalWireCall(config, {
@@ -483,6 +490,12 @@ async function waitForTest(store, testId, timeoutMs, pollMs = 250) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function booleanFromInput(value, fallback) {
+  if (value === undefined || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
 }
 
 function requiresApiKey(config, req, url) {

@@ -56,8 +56,12 @@ export class EventStore {
         signalWireCallCreated: false,
         signalWireStatus: false,
         signalWireTerminal: false,
-        placetelIncomingCall: false,
-        placetelHungUp: false,
+        ...(input.waitForPlacetelWebhook
+          ? {
+              placetelIncomingCall: false,
+              placetelHungUp: false,
+            }
+          : {}),
       },
       request: input,
       events: [],
@@ -77,7 +81,9 @@ export class EventStore {
     test.signalWireResponse = result.response;
     test.signalWireRequest = result.request;
     test.status = "pending";
-    test.reason = "Waiting for SignalWire and Placetel webhooks.";
+    test.reason = test.request.waitForPlacetelWebhook
+      ? "Waiting for SignalWire and Placetel webhooks."
+      : "Waiting for SignalWire webhooks.";
     test.updatedAt = new Date().toISOString();
     this.evaluateTest(test);
   }
@@ -151,8 +157,12 @@ export class EventStore {
       signalWireCallCreated: Boolean(test.signalWireCallSid),
       signalWireStatus: false,
       signalWireTerminal: false,
-      placetelIncomingCall: false,
-      placetelHungUp: false,
+      ...(test.request.waitForPlacetelWebhook
+        ? {
+            placetelIncomingCall: false,
+            placetelHungUp: false,
+          }
+        : {}),
     };
 
     for (const event of test.events) {

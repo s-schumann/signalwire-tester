@@ -43,6 +43,7 @@ export function readConfig(env = process.env) {
         "SignalWire webhook test connected successfully.",
     },
     placetel: {
+      waitForWebhook: booleanFromEnv(env.WAIT_FOR_PLACETEL_WEBHOOK, true),
       sharedSecret: env.PLACETEL_SHARED_SECRET || "",
       action: (env.PLACETEL_ACTION || "hangup").toLowerCase(),
       forwardTargets: splitList(env.PLACETEL_FORWARD_TARGETS || ""),
@@ -88,6 +89,11 @@ function splitList(value) {
 function numberFromEnv(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function booleanFromEnv(value, fallback) {
+  if (value === undefined || value === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
 }
 
 function unquote(value) {

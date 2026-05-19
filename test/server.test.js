@@ -269,6 +269,93 @@ test("Synchronous round-trip check returns 503 when callbacks do not complete", 
   }
 });
 
+test("Round-trip test can skip waiting for Placetel webhooks", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+    WAIT_FOR_PLACETEL_WEBHOOK: "false",
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ sid: "SW-NO-PLACETEL", status: "queued" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const created = await request("/tests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const createdBody = await created.json();
+
+    await request(`/webhooks/signalwire/status?test_id=${createdBody.test.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=SW-NO-PLACETEL&CallStatus=completed",
+    });
+
+    const testResponse = await request(`/tests/${createdBody.test.id}`);
+    const testBody = await testResponse.json();
+
+    assert.equal(testBody.test.status, "ok");
+    assert.equal(testBody.test.ok, true);
+    assert.deepEqual(testBody.test.missing, []);
+    assert.equal("placetelIncomingCall" in testBody.test.expected, false);
+    assert.equal("placetelHungUp" in testBody.test.expected, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Synchronous round-trip check can skip waiting for Placetel webhooks by query", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ sid: "SW-QUERY-NO-PLACETEL", status: "queued" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const pendingResponse = request(
+      "/checks/round-trip?waitTimeoutMs=1000&waitForPlacetelWebhook=false",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const tests = await request("/tests");
+    const testId = (await tests.json()).tests[0].id;
+    await request(`/webhooks/signalwire/status?test_id=${testId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=SW-QUERY-NO-PLACETEL&CallStatus=completed",
+    });
+
+    const response = await pendingResponse;
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.missing, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 function createTestRequest(env) {
   return createTestRequestWithStore(env).request;
 }

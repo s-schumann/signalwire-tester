@@ -48,6 +48,7 @@ SIGNALWIRE_TOKEN=your-token
 SIGNALWIRE_FROM=+496990009000
 DEFAULT_TO=+493023125000
 TEST_TIMEOUT_MS=120000
+WAIT_FOR_PLACETEL_WEBHOOK=true
 PLACETEL_SHARED_SECRET=your-placetel-secret
 PLACETEL_ACTION=hangup
 ```
@@ -88,6 +89,8 @@ A test is `ok` only when all of these are observed:
 - A terminal SignalWire status was received: `completed`, `busy`, `no-answer`, `failed`, or `canceled`.
 - Placetel `IncomingCall` callback was received.
 - Placetel `HungUp` callback was received.
+
+If `WAIT_FOR_PLACETEL_WEBHOOK=false`, the Placetel callback requirements are removed from pass/fail evaluation. This supports running multiple testers when Placetel can only point to one webhook URL. `GET /checks/round-trip` and `POST /tests` can also override this per run with `waitForPlacetelWebhook=false`.
 
 SignalWire callback URLs for tests include `?test_id=...` for exact correlation. Placetel has no test ID, so Placetel events are correlated by call timing plus normalized `to` and `from` numbers. German national formats such as `030...` and `069...` are matched against E.164 `+4930...` and `+4969...`.
 

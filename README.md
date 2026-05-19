@@ -28,6 +28,7 @@ Fill in:
 - `SIGNALWIRE_FROM`: a SignalWire-owned caller ID in E.164 format.
 - `DEFAULT_TO`: the Placetel number to call, in E.164 format.
 - `TEST_TIMEOUT_MS`: how long a round-trip test may wait before it is considered failed.
+- `WAIT_FOR_PLACETEL_WEBHOOK`: set to `false` when this tester cannot receive Placetel webhooks because Placetel points to another tester URL.
 
 If Placetel has a shared secret configured in External APIs, set `PLACETEL_SHARED_SECRET` so incoming Placetel requests are verified against `X-PLACETEL-SIGNATURE`.
 
@@ -72,6 +73,7 @@ SIGNALWIRE_TOKEN=your-token
 SIGNALWIRE_FROM=+496990009000
 DEFAULT_TO=+493023125000
 TEST_TIMEOUT_MS=120000
+WAIT_FOR_PLACETEL_WEBHOOK=true
 PLACETEL_SHARED_SECRET=your-placetel-secret
 PLACETEL_ACTION=hangup
 ```
@@ -132,6 +134,14 @@ This is the normal end-to-end check. It initiates a SignalWire call and marks th
 - Placetel `IncomingCall` webhook.
 - Placetel `HungUp` webhook.
 
+If multiple testers share one Placetel account and only one of them can receive the Placetel webhook, set this on the other testers:
+
+```env
+WAIT_FOR_PLACETEL_WEBHOOK=false
+```
+
+In that mode the pass criteria become SignalWire-only: call created, at least one SignalWire status callback, and a terminal SignalWire status.
+
 With defaults from `.env`:
 
 ```sh
@@ -177,6 +187,7 @@ Optional query parameters:
 ```txt
 waitTimeoutMs=120000
 timeoutMs=120000
+waitForPlacetelWebhook=false
 to=+493023125000
 from=+496990009000
 ```
