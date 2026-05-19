@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import { URL } from "node:url";
-import { readConfig, requireSignalWireConfig } from "./config.js";
+import { loadDotEnv, readConfig, requireSignalWireConfig } from "./config.js";
 import { createSignalWireCall } from "./signalwire.js";
 import { EventStore } from "./store.js";
 import { placetelControlXml, signalWireVoiceXml } from "./xml.js";
 
+loadDotEnv();
 const config = readConfig();
 const store = new EventStore();
 

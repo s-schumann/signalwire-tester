@@ -1,3 +1,26 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+
+export function loadDotEnv(path = join(root, ".env"), env = process.env) {
+  if (!existsSync(path)) return;
+
+  const lines = readFileSync(path, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+
+    const key = trimmed.slice(0, separator).trim();
+    const value = unquote(trimmed.slice(separator + 1).trim());
+    if (key && env[key] === undefined) env[key] = value;
+  }
+}
+
 export function readConfig(env = process.env) {
   const port = numberFromEnv(env.PORT, 3000);
   const publicBaseUrl = cleanBaseUrl(env.PUBLIC_BASE_URL || "");
@@ -65,4 +88,14 @@ function splitList(value) {
 function numberFromEnv(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function unquote(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
