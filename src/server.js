@@ -150,18 +150,174 @@ export function createApp(config, store) {
 function serviceInfo(config) {
   return {
     name: "signalwire-placetel-tester",
+    description:
+      "Webhook-first SignalWire and Placetel round-trip calling tester.",
     endpoints: {
-      health: "GET /health",
-      synchronousRoundTripCheck: "GET /checks/round-trip",
-      initiateCall: "POST /calls",
-      startRoundTripTest: "POST /tests",
-      listRoundTripTests: "GET /tests",
-      listCalls: "GET /calls",
-      listEvents: "GET /events?limit=100",
-      signalWireVoice: "POST /webhooks/signalwire/voice",
-      signalWireStatus: "POST /webhooks/signalwire/status",
-      placetel: "POST /webhooks/placetel",
+      health: endpointDoc({
+        method: "GET",
+        path: "/health",
+        description: "Lightweight process health check. Does not place a call.",
+        responses: {
+          200: { ok: true, time: "2026-05-19T08:55:30.209Z" },
+        },
+      }),
+      synchronousRoundTripCheck: endpointDoc({
+        method: "GET",
+        path: "/checks/round-trip",
+        description:
+          "Starts a real SignalWire call, waits for SignalWire and Placetel callbacks, and returns one monitor-friendly result.",
+        query: {
+          waitTimeoutMs: "Maximum time to hold the HTTP response open. Default: TEST_TIMEOUT_MS.",
+          timeoutMs: "Round-trip test timeout. Default: TEST_TIMEOUT_MS.",
+          to: "Optional Placetel destination override. Default: DEFAULT_TO.",
+          from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
+        },
+        responses: {
+          200: {
+            ok: true,
+            status: "ok",
+            reason: "All required SignalWire and Placetel callbacks were received.",
+            missing: [],
+            test: "{ round-trip test object }",
+          },
+          503: {
+            ok: false,
+            status: "pending or failed",
+            reason: "Waiting for or timed out waiting for required callbacks.",
+            missing: ["signalWireTerminal"],
+            test: "{ round-trip test object }",
+          },
+          400: {
+            error: "Missing SignalWire configuration",
+            details: { missing: ["SIGNALWIRE_FROM"] },
+          },
+        },
+      }),
+      initiateCall: endpointDoc({
+        method: "POST",
+        path: "/calls",
+        description:
+          "Creates a raw SignalWire outbound call and logs callbacks, without pass/fail round-trip evaluation.",
+        body: {
+          to: "Optional destination override. Default: DEFAULT_TO.",
+          from: "Optional caller ID override. Default: SIGNALWIRE_FROM.",
+          url: "Optional SignalWire voice webhook override.",
+          statusCallback: "Optional SignalWire status callback override.",
+        },
+        responses: {
+          201: {
+            request: "{ SignalWire call request summary }",
+            response: "{ SignalWire create-call response }",
+          },
+          400: {
+            error: "Missing SignalWire configuration",
+            missing: ["SIGNALWIRE_FROM"],
+          },
+        },
+      }),
+      startRoundTripTest: endpointDoc({
+        method: "POST",
+        path: "/tests",
+        description:
+          "Starts a real round-trip test and returns immediately with the initial test state.",
+        body: {
+          to: "Optional Placetel destination override. Default: DEFAULT_TO.",
+          from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
+          timeoutMs: "Optional test timeout override.",
+        },
+        responses: {
+          201: {
+            test: "{ status, expected checklist, missing checklist, events, SignalWire call SID }",
+          },
+        },
+      }),
+      listRoundTripTests: endpointDoc({
+        method: "GET",
+        path: "/tests",
+        description: "Lists in-memory round-trip tests, newest first.",
+        responses: {
+          200: {
+            tests: ["{ round-trip test object }"],
+          },
+        },
+      }),
+      getRoundTripTest: endpointDoc({
+        method: "GET",
+        path: "/tests/{test_id}",
+        description: "Returns one round-trip test by ID.",
+        responses: {
+          200: {
+            test: "{ round-trip test object }",
+          },
+          404: {
+            error: "Test not found",
+          },
+        },
+      }),
+      listCalls: endpointDoc({
+        method: "GET",
+        path: "/calls",
+        description: "Lists observed call records and attached events.",
+        responses: {
+          200: {
+            calls: ["{ call record }"],
+          },
+        },
+      }),
+      listEvents: endpointDoc({
+        method: "GET",
+        path: "/events",
+        description: "Lists recent webhook and call-creation events, newest first.",
+        query: {
+          limit: "Maximum event count. Default: 100.",
+        },
+        responses: {
+          200: {
+            events: ["{ event object }"],
+          },
+        },
+      }),
+      signalWireVoice: endpointDoc({
+        method: "POST",
+        path: "/webhooks/signalwire/voice",
+        description:
+          "SignalWire voice webhook. Logs the request and returns LaML/TwiML-compatible XML.",
+        query: {
+          test_id: "Optional round-trip test correlation ID.",
+        },
+        responses: {
+          200: '<?xml version="1.0" encoding="UTF-8"?><Response><Say>...</Say><Hangup/></Response>',
+        },
+      }),
+      signalWireStatus: endpointDoc({
+        method: "POST",
+        path: "/webhooks/signalwire/status",
+        description: "SignalWire call-progress webhook receiver.",
+        query: {
+          test_id: "Optional round-trip test correlation ID.",
+        },
+        responses: {
+          200: { ok: true, eventId: "uuid" },
+        },
+      }),
+      placetel: endpointDoc({
+        method: "POST",
+        path: "/webhooks/placetel",
+        description:
+          "Placetel Call Control/Notify webhook receiver. Verifies HMAC when configured and returns Placetel XML control instructions.",
+        responses: {
+          200: '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup /></Response>',
+          401: { error: "Invalid Placetel signature" },
+        },
+      }),
     },
+    roundTripOkRequires: [
+      "SignalWire call created",
+      "At least one SignalWire status callback",
+      "SignalWire terminal status: completed, busy, no-answer, failed, or canceled",
+      "Placetel IncomingCall callback",
+      "Placetel HungUp callback",
+    ],
     configured: {
       publicBaseUrl: Boolean(config.publicBaseUrl),
       signalWireBaseUrl: Boolean(config.signalWire.baseUrl),
@@ -171,6 +327,18 @@ function serviceInfo(config) {
       placetelSharedSecret: Boolean(config.placetel.sharedSecret),
       placetelAction: config.placetel.action,
     },
+  };
+}
+
+function endpointDoc({ method, path, description, query, body, responses }) {
+  return {
+    method,
+    path,
+    usage: `${method} ${path}`,
+    description,
+    ...(query ? { query } : {}),
+    ...(body ? { body } : {}),
+    responses,
   };
 }
 

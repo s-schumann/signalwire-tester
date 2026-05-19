@@ -44,6 +44,53 @@ Expose it publicly, then configure Placetel External APIs to call:
 https://your-public-url/webhooks/placetel
 ```
 
+## Docker
+
+Build the image:
+
+```sh
+docker build -t signalwire-placetel-tester .
+```
+
+Run it with an env file:
+
+```sh
+docker run --rm -p 3000:3000 --env-file .env signalwire-placetel-tester
+```
+
+For a remote deployment, provide these environment variables through your platform secret/config mechanism:
+
+```env
+PORT=3000
+PUBLIC_BASE_URL=https://your-public-host.example
+SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
+SIGNALWIRE_PROJECT_ID=your-project-id
+SIGNALWIRE_TOKEN=your-token
+SIGNALWIRE_FROM=+496990009000
+DEFAULT_TO=+493023125000
+TEST_TIMEOUT_MS=120000
+PLACETEL_SHARED_SECRET=your-placetel-secret
+PLACETEL_ACTION=hangup
+```
+
+Persist `/app/data` as a volume if you want `events.jsonl` to survive container restarts:
+
+```sh
+docker run --rm -p 3000:3000 --env-file .env \
+  -v signalwire-tester-data:/app/data \
+  signalwire-placetel-tester
+```
+
+## API Index
+
+`GET /` returns self-documenting JSON with:
+
+- endpoint methods and paths
+- endpoint purpose
+- query/body parameters
+- response status codes and example response bodies
+- current configuration booleans, with secrets represented only as `true` or `false`
+
 ## Start A Round-Trip Test
 
 This is the normal end-to-end check. It initiates a SignalWire call and marks the run `ok` only after all required callbacks arrive:
