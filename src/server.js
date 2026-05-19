@@ -121,6 +121,8 @@ export function createApp(config, store) {
           callSid: callSid || result.response.sid || result.response.call_sid,
           to: result.request.to,
           from: result.request.from,
+          voiceWebhookUrl: result.request.url,
+          statusWebhookUrl: result.request.statusCallback,
         });
         return send(res, 201, result);
       }
@@ -466,6 +468,8 @@ async function startRoundTripTest({ body, config, store }) {
     callSid,
     to: result.request.to,
     from: result.request.from,
+    voiceWebhookUrl: result.request.url,
+    statusWebhookUrl: result.request.statusCallback,
   });
   if (callSid) {
     store.upsertCall(callSid, {
