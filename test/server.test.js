@@ -159,11 +159,98 @@ test("Round-trip test treats SignalWire busy as terminal for hangup flows", asyn
   }
 });
 
-function createTestRequest(env) {
-  const config = readConfig({ PORT: "0", ...env });
-  const app = createApp(config, new EventStore());
+test("Synchronous round-trip check returns 200 when callbacks complete before timeout", async () => {
+  const { request, store } = createTestRequestWithStore({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+  });
 
-  return async function request(path, options = {}) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ sid: "SW789", status: "queued" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const pendingResponse = request("/checks/round-trip?waitTimeoutMs=1000");
+    await waitUntil(() => store.listTests().length === 1);
+    const test = store.listTests()[0];
+
+    await request(`/webhooks/signalwire/status?test_id=${test.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=SW789&CallStatus=completed",
+    });
+    await request("/webhooks/placetel", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:
+        "call_id=PL789&direction=in&event=IncomingCall&from=069200602148&to=030515659470",
+    });
+    await request("/webhooks/placetel", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:
+        "call_id=PL789&direction=in&event=HungUp&from=069200602148&to=030515659470",
+    });
+
+    const response = await pendingResponse;
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.test.id, test.id);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Synchronous round-trip check returns 503 when callbacks do not complete", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ sid: "SW999", status: "queued" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const response = await request("/checks/round-trip?waitTimeoutMs=10");
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.equal(body.ok, false);
+    assert.match(body.reason, /Waiting for|Timed out/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+function createTestRequest(env) {
+  return createTestRequestWithStore(env).request;
+}
+
+function createTestRequestWithStore(env) {
+  const config = readConfig({ PORT: "0", ...env });
+  const store = new EventStore();
+  const app = createApp(config, store);
+
+  return {
+    store,
+    request: async function request(path, options = {}) {
     const req = Readable.from(options.body || "");
     req.method = options.method || "GET";
     req.url = path;
@@ -187,6 +274,7 @@ function createTestRequest(env) {
       status: res.statusCode,
       headers: res.headers,
     });
+    },
   };
 }
 
@@ -194,4 +282,13 @@ function normalizeHeaders(headers) {
   return Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
   );
+}
+
+async function waitUntil(predicate, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for predicate");
 }

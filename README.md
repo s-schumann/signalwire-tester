@@ -6,6 +6,7 @@ It provides:
 
 - `POST /calls` to initiate a SignalWire Compatibility API call.
 - `POST /tests` to initiate a full round-trip test and evaluate required callbacks.
+- `GET /checks/round-trip` to synchronously run the full check for uptime monitors.
 - `POST /webhooks/signalwire/status` to receive all requested SignalWire call status callbacks.
 - `POST /webhooks/signalwire/voice` to return LaML/TwiML-compatible XML when the SignalWire call is answered.
 - `POST /webhooks/placetel` to receive Placetel Call Control/Notify API events and return Placetel XML control instructions.
@@ -77,6 +78,29 @@ Inspect test status:
 ```sh
 curl http://localhost:3000/tests
 curl http://localhost:3000/tests/{test_id}
+```
+
+## Synchronous Monitor Endpoint
+
+For Uptime Kuma or any HTTP monitor that needs a single request/response, use:
+
+```txt
+GET http://localhost:3000/checks/round-trip
+```
+
+The endpoint starts a real SignalWire call, waits for the SignalWire and Placetel callbacks, then returns:
+
+- `200` with `"ok": true` when the full round trip passes.
+- `503` with `"ok": false` when required callbacks are missing before timeout.
+- `400` when required configuration is missing.
+
+Optional query parameters:
+
+```txt
+waitTimeoutMs=120000
+timeoutMs=120000
+to=+493023125000
+from=+496990009000
 ```
 
 ## Start A Raw Call

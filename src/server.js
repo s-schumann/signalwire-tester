@@ -29,6 +29,23 @@ export function createApp(config, store) {
         return send(res, 200, { ok: true, time: new Date().toISOString() });
       }
 
+      if (req.method === "GET" && url.pathname === "/checks/round-trip") {
+        const body = Object.fromEntries(url.searchParams.entries());
+        const result = await startRoundTripTest({ body, config, store });
+        const waitTimeoutMs = Number.parseInt(
+          body.waitTimeoutMs || body.timeoutMs || config.signalWire.testTimeoutMs,
+          10,
+        );
+        const test = await waitForTest(store, result.test.id, waitTimeoutMs);
+        return send(res, test.ok ? 200 : 503, {
+          ok: test.ok,
+          status: test.status,
+          reason: test.reason,
+          missing: test.missing,
+          test,
+        });
+      }
+
       if (req.method === "GET" && url.pathname === "/events") {
         const limit = Number.parseInt(url.searchParams.get("limit") || "100", 10);
         return send(res, 200, { events: store.listEvents(limit) });
@@ -52,49 +69,8 @@ export function createApp(config, store) {
       if (req.method === "POST" && url.pathname === "/tests") {
         const input = await readRequestBody(req);
         const body = parseBody(input);
-        const missing = requireSignalWireConfig(config, body);
-        if (missing.length) {
-          return send(res, 400, {
-            error: "Missing SignalWire configuration",
-            missing,
-          });
-        }
-
-        const callbackBase = body.publicBaseUrl || config.publicBaseUrl;
-        const test = store.createTest({
-          to: body.to || config.signalWire.defaultTo,
-          from: body.from || config.signalWire.from,
-          timeoutMs: Number.parseInt(body.timeoutMs || config.signalWire.testTimeoutMs, 10),
-        });
-
-        const result = await createSignalWireCall(config, {
-          ...body,
-          statusCallback:
-            body.statusCallback ||
-            `${callbackBase}/webhooks/signalwire/status?test_id=${test.id}`,
-          url:
-            body.url ||
-            `${callbackBase}/webhooks/signalwire/voice?test_id=${test.id}`,
-        });
-
-        const callSid = result.response.sid || result.response.call_sid;
-        if (callSid) {
-          store.upsertCall(callSid, {
-            provider: "signalwire",
-            request: result.request,
-            response: result.response,
-            testId: test.id,
-            createdAt: new Date().toISOString(),
-          });
-        }
-
-        store.markTestCallCreated(test.id, result);
-        await store.record("signalwire.call.created", result.response, {
-          request: result.request,
-          testId: test.id,
-        });
-
-        return send(res, 201, { test: store.getTest(test.id) });
+        const result = await startRoundTripTest({ body, config, store });
+        return send(res, 201, result);
       }
 
       if (req.method === "POST" && url.pathname === "/calls") {
@@ -176,6 +152,7 @@ function serviceInfo(config) {
     name: "signalwire-placetel-tester",
     endpoints: {
       health: "GET /health",
+      synchronousRoundTripCheck: "GET /checks/round-trip",
       initiateCall: "POST /calls",
       startRoundTripTest: "POST /tests",
       listRoundTripTests: "GET /tests",
@@ -195,6 +172,68 @@ function serviceInfo(config) {
       placetelAction: config.placetel.action,
     },
   };
+}
+
+async function startRoundTripTest({ body, config, store }) {
+  const missing = requireSignalWireConfig(config, body);
+  if (missing.length) {
+    const error = new Error("Missing SignalWire configuration");
+    error.status = 400;
+    error.body = { missing };
+    throw error;
+  }
+
+  const callbackBase = body.publicBaseUrl || config.publicBaseUrl;
+  const test = store.createTest({
+    to: body.to || config.signalWire.defaultTo,
+    from: body.from || config.signalWire.from,
+    timeoutMs: Number.parseInt(body.timeoutMs || config.signalWire.testTimeoutMs, 10),
+  });
+
+  const result = await createSignalWireCall(config, {
+    ...body,
+    statusCallback:
+      body.statusCallback ||
+      `${callbackBase}/webhooks/signalwire/status?test_id=${test.id}`,
+    url:
+      body.url ||
+      `${callbackBase}/webhooks/signalwire/voice?test_id=${test.id}`,
+  });
+
+  const callSid = result.response.sid || result.response.call_sid;
+  if (callSid) {
+    store.upsertCall(callSid, {
+      provider: "signalwire",
+      request: result.request,
+      response: result.response,
+      testId: test.id,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  store.markTestCallCreated(test.id, result);
+  await store.record("signalwire.call.created", result.response, {
+    request: result.request,
+    testId: test.id,
+  });
+
+  return { test: store.getTest(test.id) };
+}
+
+async function waitForTest(store, testId, timeoutMs, pollMs = 250) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() <= deadline) {
+    const test = store.getTest(testId);
+    if (!test || test.status === "ok" || test.status === "failed") return test;
+    await sleep(pollMs);
+  }
+
+  return store.getTest(testId);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function requiresAdminAuth(config, path) {
