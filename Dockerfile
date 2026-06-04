@@ -8,6 +8,7 @@ WORKDIR /app
 COPY package.json ./
 COPY src ./src
 
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 RUN mkdir -p /app/data && chown -R node:node /app
 
 USER node

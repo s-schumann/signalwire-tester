@@ -72,6 +72,26 @@ Build the image:
 docker build -t signalwire-placetel-tester .
 ```
 
+Build and publish the current production image:
+
+```sh
+git pull && docker buildx build \
+  --platform linux/amd64 --provenance=true --sbom=true \
+  --push -t schumann/signalwire-tester:latest \
+  .
+```
+
+The production image removes npm and npx after copying the application files. This
+mitigates Docker Scout finding `CVE-2026-33671` in npm's bundled
+`picomatch@4.0.3` from the `node:22-alpine` base image. The service only needs the
+`node` binary at runtime, so removing npm also reduces the runtime package surface.
+
+To verify the mitigation with Docker Scout:
+
+```sh
+docker scout cves schumann/signalwire-tester:latest --only-cve-id CVE-2026-33671
+```
+
 Run it with an env file:
 
 ```sh
