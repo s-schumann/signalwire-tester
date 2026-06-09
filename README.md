@@ -81,15 +81,17 @@ git pull && docker buildx build \
   .
 ```
 
-The production image removes npm and npx after copying the application files. This
-mitigates Docker Scout finding `CVE-2026-33671` in npm's bundled
-`picomatch@4.0.3` from the `node:22-alpine` base image. The service only needs the
-`node` binary at runtime, so removing npm also reduces the runtime package surface.
+The production image builds from `node:22-alpine`, then publishes a `scratch`
+runtime image containing only the Node binary, required shared libraries, CA
+certificates, and the application files. This removes npm/npx, mitigating Docker
+Scout finding `CVE-2026-33671` in npm's bundled `picomatch@4.0.3`. It also avoids
+shipping Alpine's BusyBox package in the final image, which removes the remaining
+BusyBox CVE from Scout.
 
-To verify the mitigation with Docker Scout:
+To verify the Scout result:
 
 ```sh
-docker scout cves schumann/signalwire-tester:latest --only-cve-id CVE-2026-33671
+docker scout cves schumann/signalwire-tester:latest
 ```
 
 Run it with an env file:
