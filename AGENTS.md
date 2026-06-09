@@ -144,6 +144,74 @@ docker run --rm -p 3000:3000 --env-file .env \
 
 Docker was not available in the local Codex environment when this file was written, so the Dockerfile was not built locally. `npm test` passed.
 
+## Versioning And Release Policy
+
+Use SemVer release tags in the form `vMAJOR.MINOR.PATCH`, for example `v0.1.0`.
+The repository default branch is named `master`.
+
+This project has `package.json`, so `package.json` is the version source. Create
+release commits and tags with one of:
+
+```sh
+npm version patch -m "chore(release): %s"
+npm version minor -m "chore(release): %s"
+npm version major -m "chore(release): %s"
+```
+
+Then push the release commit and tag:
+
+```sh
+git push origin master --tags
+```
+
+Before the first real release, the repo should have:
+
+- tests that cover the critical webhook and call-creation behavior
+- linting or another agreed static check
+- a changelog or release notes habit
+- a clear decision whether `0.x` versions are still considered unstable
+
+## Container Release Policy
+
+- Default-branch commits may publish immutable commit-SHA image tags.
+- The `latest` image tag must mean latest tagged release, not latest default-branch commit.
+- Release tag pipelines should publish the commit-SHA tag, the version tag, and
+  `latest` in one single Buildx invocation so all release aliases point to the
+  same image digest.
+- Published images should include SBOM and max-mode provenance attestations when
+  supported:
+
+```sh
+docker buildx build --provenance=mode=max --sbom=true
+```
+
+- Registry credentials should be protected CI variables.
+- Release tags such as `v*` should be protected so tag pipelines can access
+  protected variables.
+- Avoid privileged Docker-in-Docker where possible. Prefer a dedicated
+  Buildx-capable runner.
+
+Manual container release workflow:
+
+1. Create the release commit and SemVer tag with `npm version`.
+2. Push with `git push origin master --tags`.
+3. Build and push all release aliases in one Buildx invocation, using the same
+   build output for the commit-SHA tag, version tag, and `latest`.
+
+Example shape:
+
+```sh
+docker buildx build \
+  --platform linux/amd64 \
+  --provenance=mode=max \
+  --sbom=true \
+  --push \
+  -t schumann/signalwire-tester:${COMMIT_SHA} \
+  -t schumann/signalwire-tester:${VERSION_TAG} \
+  -t schumann/signalwire-tester:latest \
+  .
+```
+
 ## Development Constraints
 
 - Keep the app dependency-free unless there is a clear need.
