@@ -117,13 +117,13 @@ test("Round-trip test fails until all required callback types are present", asyn
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:
-        "call_id=PL123&direction=in&event=IncomingCall&from=015226453669&to=030515659470",
+        "call_id=PL123&direction=in&event=IncomingCall&from=015228817386&to=03023125000",
     });
     await request("/webhooks/placetel", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:
-        "call_id=PL123&direction=in&event=HungUp&from=015226453669&to=030515659470",
+        "call_id=PL123&direction=in&event=HungUp&from=015228817386&to=03023125000",
     });
 
     const listed = await request("/tests");
@@ -174,13 +174,13 @@ test("Round-trip test treats SignalWire busy as terminal for hangup flows", asyn
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:
-        "call_id=PL456&direction=in&event=IncomingCall&from=069200602148&to=030515659470",
+        "call_id=PL456&direction=in&event=IncomingCall&from=06990009000&to=03023125000",
     });
     await request("/webhooks/placetel", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:
-        "call_id=PL456&direction=in&event=HungUp&from=069200602148&to=030515659470",
+        "call_id=PL456&direction=in&event=HungUp&from=06990009000&to=03023125000",
     });
 
     const testResponse = await request(`/tests/${createdBody.test.id}`);
@@ -226,13 +226,13 @@ test("Synchronous round-trip check returns 200 when callbacks complete before ti
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:
-        "call_id=PL789&direction=in&event=IncomingCall&from=069200602148&to=030515659470",
+        "call_id=PL789&direction=in&event=IncomingCall&from=06990009000&to=03023125000",
     });
     await request("/webhooks/placetel", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:
-        "call_id=PL789&direction=in&event=HungUp&from=069200602148&to=030515659470",
+        "call_id=PL789&direction=in&event=HungUp&from=06990009000&to=03023125000",
     });
 
     const response = await pendingResponse;

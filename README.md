@@ -313,7 +313,7 @@ The service also writes simple interaction logs to stdout for container logs, fo
 
 ```txt
 [2026-05-19T10:54:06.979Z] Starting synchronous round-trip check {"to":"+493023125000","from":"+496990009000"}
-[2026-05-19T10:54:06.980Z] Received Placetel webhook {"event":"IncomingCall","from":"069200602148","to":"030515659470"}
+[2026-05-19T10:54:06.980Z] Received Placetel webhook {"event":"IncomingCall","from":"06990009000","to":"03023125000"}
 ```
 
 ## Notes
