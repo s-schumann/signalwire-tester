@@ -67,9 +67,15 @@ When `API_KEY` is configured, non-webhook API endpoints require one of:
 
 - `Authorization: Bearer <API_KEY>`
 - `X-API-Key: <API_KEY>`
-- `api_key=<API_KEY>` query parameter
 
-Webhook endpoints and `GET /health` intentionally remain public.
+The `api_key` query parameter is not accepted (it would leak into access logs).
+Call-creating endpoints (`POST /calls`, `POST /tests`, `GET /checks/round-trip`)
+are disabled and return `503` when `API_KEY` is unset.
+
+Webhook endpoints and `GET /health` intentionally remain public. Inbound
+SignalWire webhooks are signature-verified per `SIGNALWIRE_VERIFY_WEBHOOKS`
+(`auto`|`on`|`off`); `auto` verifies only when no `SIGNALWIRE_*_WEBHOOK_URL`
+override is set (i.e. callbacks reach this server directly).
 
 ## Key Endpoints
 

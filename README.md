@@ -163,8 +163,12 @@ Also supported:
 
 ```sh
 curl -H 'X-API-Key: change-me' http://localhost:3000/tests
-curl 'http://localhost:3000/checks/round-trip?api_key=change-me&waitTimeoutMs=120000'
+curl -H 'Authorization: Bearer change-me' 'http://localhost:3000/checks/round-trip?waitTimeoutMs=120000'
 ```
+
+The API key is read only from the `Authorization`/`X-API-Key` headers; the
+`api_key` query parameter is not accepted (it would leak the key into access
+logs). Call-creating endpoints are disabled entirely when `API_KEY` is unset.
 
 ## Start A Round-Trip Test
 
@@ -223,6 +227,7 @@ The endpoint starts a real SignalWire call, waits for the SignalWire and Placete
 - `200` with `"ok": true` when the full round trip passes.
 - `503` with `"ok": false` when required callbacks are missing before timeout.
 - `400` when required configuration is missing.
+- `403` when `to` is not in `ALLOWED_TO_NUMBERS` (when that allowlist is set).
 
 Optional query parameters:
 
@@ -233,6 +238,10 @@ waitForPlacetelWebhook=false
 to=+493023125000
 from=+496990009000
 ```
+
+`waitTimeoutMs`/`timeoutMs` are clamped to a 600000 ms maximum. The SignalWire
+API base URL, credentials, and callback URLs come only from server config and
+cannot be overridden per request.
 
 ## Start A Raw Call
 

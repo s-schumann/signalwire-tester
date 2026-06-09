@@ -31,6 +31,7 @@ export function readConfig(env = process.env) {
     host,
     apiKey: env.API_KEY || "",
     publicBaseUrl,
+    allowedToNumbers: splitList(env.ALLOWED_TO_NUMBERS || ""),
     signalWire: {
       baseUrl: cleanBaseUrl(env.SIGNALWIRE_BASE_URL || ""),
       projectId: env.SIGNALWIRE_PROJECT_ID || "",
@@ -39,6 +40,7 @@ export function readConfig(env = process.env) {
       defaultTo: env.DEFAULT_TO || "",
       voiceWebhookUrl: env.SIGNALWIRE_VOICE_WEBHOOK_URL || "",
       statusWebhookUrl: env.SIGNALWIRE_STATUS_WEBHOOK_URL || "",
+      verifyWebhooks: normalizeVerifyMode(env.SIGNALWIRE_VERIFY_WEBHOOKS),
       testTimeoutMs: numberFromEnv(env.TEST_TIMEOUT_MS, 120000),
       sayMessage:
         env.SIGNALWIRE_SAY_MESSAGE ||
@@ -100,6 +102,17 @@ function splitList(value) {
 function numberFromEnv(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+// SIGNALWIRE_VERIFY_WEBHOOKS controls inbound SignalWire webhook signature checks.
+//   "auto" (default): verify only when callbacks reach this server directly, i.e.
+//     no explicit SIGNALWIRE_*_WEBHOOK_URL override is set and a token is available.
+//   "on"/"off": force verification on or off regardless of routing.
+function normalizeVerifyMode(value) {
+  const normalized = String(value || "auto").toLowerCase();
+  if (["off", "false", "0", "no"].includes(normalized)) return "off";
+  if (["on", "true", "1", "yes"].includes(normalized)) return "on";
+  return "auto";
 }
 
 function booleanFromEnv(value, fallback) {

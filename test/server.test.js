@@ -43,7 +43,7 @@ test("Placetel webhook accepts valid HMAC and returns XML", async () => {
 });
 
 test("API key protects non-webhook endpoints when configured", async () => {
-  const request = createTestRequest({ API_KEY: "secret-key" });
+  const request = createTestRequest({ API_KEY: "secret-key" }, { autoAuth: false });
 
   const unauthenticated = await request("/tests");
   const webhook = await request("/webhooks/signalwire/status", {
@@ -60,8 +60,8 @@ test("API key protects non-webhook endpoints when configured", async () => {
   assert.equal(authenticated.status, 200);
 });
 
-test("API key can be supplied through X-API-Key or query parameter", async () => {
-  const request = createTestRequest({ API_KEY: "secret-key" });
+test("API key works via X-API-Key header but not via query parameter", async () => {
+  const request = createTestRequest({ API_KEY: "secret-key" }, { autoAuth: false });
 
   const headerResponse = await request("/", {
     headers: { "X-API-Key": "secret-key" },
@@ -69,7 +69,7 @@ test("API key can be supplied through X-API-Key or query parameter", async () =>
   const queryResponse = await request("/tests?api_key=secret-key");
 
   assert.equal(headerResponse.status, 200);
-  assert.equal(queryResponse.status, 200);
+  assert.equal(queryResponse.status, 401);
 });
 
 test("Round-trip test fails until all required callback types are present", async () => {
@@ -80,6 +80,8 @@ test("Round-trip test fails until all required callback types are present", asyn
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+4915228817386",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
   });
 
   const originalFetch = globalThis.fetch;
@@ -144,6 +146,8 @@ test("Round-trip test treats SignalWire busy as terminal for hangup flows", asyn
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
   });
 
   const originalFetch = globalThis.fetch;
@@ -197,6 +201,8 @@ test("Synchronous round-trip check returns 200 when callbacks complete before ti
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
   });
 
   const originalFetch = globalThis.fetch;
@@ -248,6 +254,8 @@ test("Synchronous round-trip check returns 503 when callbacks do not complete", 
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
   });
 
   const originalFetch = globalThis.fetch;
@@ -277,6 +285,8 @@ test("Round-trip test can skip waiting for Placetel webhooks", async () => {
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
     WAIT_FOR_PLACETEL_WEBHOOK: "false",
   });
 
@@ -322,6 +332,8 @@ test("Synchronous round-trip check can skip waiting for Placetel webhooks by que
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
   });
 
   const originalFetch = globalThis.fetch;
@@ -364,6 +376,8 @@ test("Round-trip test appends test ID to configured SignalWire callback URLs", a
     SIGNALWIRE_TOKEN: "token",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    SIGNALWIRE_VERIFY_WEBHOOKS: "false",
     SIGNALWIRE_VOICE_WEBHOOK_URL: "https://proxy.example/voice?source=monitor",
     SIGNALWIRE_STATUS_WEBHOOK_URL: "https://proxy.example/status?source=monitor",
   });
@@ -396,11 +410,140 @@ test("Round-trip test appends test ID to configured SignalWire callback URLs", a
   }
 });
 
-function createTestRequest(env) {
-  return createTestRequestWithStore(env).request;
+test("SignalWire status webhook requires a valid signature in direct mode", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+  });
+
+  const path = "/webhooks/signalwire/status?test_id=abc";
+  const body = "CallSid=SW1&CallStatus=completed";
+  const params = Object.fromEntries(new URLSearchParams(body));
+
+  const unsigned = await request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  assert.equal(unsigned.status, 403);
+
+  const signature = signalWireSignature("token", `https://tester.example${path}`, params);
+  const signed = await request(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "X-SignalWire-Signature": signature,
+    },
+    body,
+  });
+  assert.equal(signed.status, 200);
+});
+
+test("SignalWire signature check is skipped when a callback URL override is set", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_STATUS_WEBHOOK_URL: "https://proxy.example/status",
+  });
+
+  const response = await request("/webhooks/signalwire/status?test_id=abc", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "CallSid=SW1&CallStatus=completed",
+  });
+
+  assert.equal(response.status, 200);
+});
+
+test("Destination outside ALLOWED_TO_NUMBERS is rejected before placing a call", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+    API_KEY: "test-key",
+    ALLOWED_TO_NUMBERS: "+493023125000",
+  });
+
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    return new Response(JSON.stringify({ sid: "SW1" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const rejected = await request("/calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "+1900555000" }),
+    });
+    assert.equal(rejected.status, 403);
+    assert.equal(fetchCalled, false);
+
+    const allowed = await request("/calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "+493023125000" }),
+    });
+    assert.equal(allowed.status, 201);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Request body over the size limit is rejected", async () => {
+  const request = createTestRequest({ API_KEY: "test-key" });
+
+  const response = await request("/calls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "x".repeat(256 * 1024 + 1),
+  });
+
+  assert.equal(response.status, 413);
+});
+
+test("Call creation is disabled when API_KEY is not configured", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+  });
+
+  const response = await request("/calls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+
+  assert.equal(response.status, 503);
+});
+
+function signalWireSignature(token, fullUrl, params) {
+  const data = Object.keys(params)
+    .sort()
+    .reduce((acc, key) => acc + key + params[key], fullUrl);
+  return crypto.createHmac("sha1", token).update(Buffer.from(data, "utf8")).digest("base64");
 }
 
-function createTestRequestWithStore(env) {
+function createTestRequest(env, opts) {
+  return createTestRequestWithStore(env, opts).request;
+}
+
+function createTestRequestWithStore(env, { autoAuth = true } = {}) {
   const config = readConfig({ PORT: "0", ...env });
   const store = new EventStore();
   const app = createApp(config, store);
@@ -408,10 +551,14 @@ function createTestRequestWithStore(env) {
   return {
     store,
     request: async function request(path, options = {}) {
-    const req = Readable.from(options.body || "");
+    const headers = normalizeHeaders(options.headers || {});
+    if (autoAuth && env.API_KEY && !headers.authorization && !headers["x-api-key"]) {
+      headers.authorization = `Bearer ${env.API_KEY}`;
+    }
+    const req = Readable.from([options.body || ""]);
     req.method = options.method || "GET";
     req.url = path;
-    req.headers = normalizeHeaders(options.headers || {});
+    req.headers = headers;
 
     const chunks = [];
     const res = new Writable({

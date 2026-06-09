@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, rename, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const logDir = join(root, "data");
 const logFile = join(logDir, "events.jsonl");
+const MAX_LOG_BYTES = 50 * 1024 * 1024;
 
 export class EventStore {
   constructor() {
@@ -41,6 +42,7 @@ export class EventStore {
     this.attachEventToTests(event);
 
     await mkdir(logDir, { recursive: true });
+    await rotateLogIfNeeded();
     await appendFile(logFile, `${JSON.stringify(event)}\n`);
     return event;
   }
@@ -224,11 +226,22 @@ export class EventStore {
   }
 }
 
-function normalizePhone(value = "") {
+// Cap the append-only event log by rotating to a single .1 backup once it grows
+// past MAX_LOG_BYTES, bounding on-disk usage even under sustained webhook traffic.
+async function rotateLogIfNeeded() {
+  try {
+    const { size } = await stat(logFile);
+    if (size > MAX_LOG_BYTES) await rename(logFile, `${logFile}.1`);
+  } catch {
+    // No existing log file yet, or it was rotated concurrently; nothing to do.
+  }
+}
+
+export function normalizePhone(value = "") {
   return String(value).replace(/\D/g, "").replace(/^00/, "");
 }
 
-function phoneMatches(left, right) {
+export function phoneMatches(left, right) {
   if (!left || !right) return false;
 
   const leftCandidates = phoneCandidates(left);

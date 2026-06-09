@@ -3,20 +3,24 @@ import http from "node:http";
 import { URL } from "node:url";
 import { loadDotEnv, readConfig, requireSignalWireConfig } from "./config.js";
 import { logInteraction } from "./logger.js";
+import { isValidSignalWireSignature } from "./signature.js";
 import { createSignalWireCall } from "./signalwire.js";
-import { EventStore } from "./store.js";
+import { EventStore, normalizePhone, phoneMatches } from "./store.js";
 import { placetelControlXml, signalWireVoiceXml } from "./xml.js";
 
 loadDotEnv();
 const config = readConfig();
 const store = new EventStore();
 
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_TIMEOUT_MS = 600000;
+
 export function createApp(config, store) {
   return async function handle(req, res) {
     try {
       const url = new URL(req.url, "http://localhost");
 
-      if (requiresApiKey(config, req, url) && !isApiKeyAuthorized(config, req, url)) {
+      if (requiresApiKey(config, req, url) && !isApiKeyAuthorized(config, req)) {
         return send(res, 401, { error: "Unauthorized" }, {
           "WWW-Authenticate": 'Bearer realm="signalwire-placetel-tester"',
         });
@@ -31,6 +35,7 @@ export function createApp(config, store) {
       }
 
       if (req.method === "GET" && url.pathname === "/checks/round-trip") {
+        requireApiKeyConfigured(config);
         const body = Object.fromEntries(url.searchParams.entries());
         logInteraction("Starting synchronous round-trip check", {
           to: body.to || config.signalWire.defaultTo,
@@ -38,9 +43,9 @@ export function createApp(config, store) {
           waitTimeoutMs: body.waitTimeoutMs || body.timeoutMs || config.signalWire.testTimeoutMs,
         });
         const result = await startRoundTripTest({ body, config, store });
-        const waitTimeoutMs = Number.parseInt(
-          body.waitTimeoutMs || body.timeoutMs || config.signalWire.testTimeoutMs,
-          10,
+        const waitTimeoutMs = clampTimeout(
+          body.waitTimeoutMs || body.timeoutMs,
+          config.signalWire.testTimeoutMs,
         );
         const test = await waitForTest(store, result.test.id, waitTimeoutMs);
         logInteraction("Synchronous round-trip check finished", {
@@ -79,6 +84,7 @@ export function createApp(config, store) {
       }
 
       if (req.method === "POST" && url.pathname === "/tests") {
+        requireApiKeyConfigured(config);
         const input = await readRequestBody(req);
         const body = parseBody(input);
         logInteraction("Starting asynchronous round-trip test", {
@@ -90,13 +96,15 @@ export function createApp(config, store) {
       }
 
       if (req.method === "POST" && url.pathname === "/calls") {
+        requireApiKeyConfigured(config);
         const input = await readRequestBody(req);
         const body = parseBody(input);
+        const callInput = definedOnly({ to: body.to, from: body.from });
         logInteraction("Creating raw SignalWire call", {
-          to: body.to || config.signalWire.defaultTo,
-          from: body.from || config.signalWire.from,
+          to: callInput.to || config.signalWire.defaultTo,
+          from: callInput.from || config.signalWire.from,
         });
-        const missing = requireSignalWireConfig(config, body);
+        const missing = requireSignalWireConfig(config, callInput);
         if (missing.length) {
           return send(res, 400, {
             error: "Missing SignalWire configuration",
@@ -104,7 +112,8 @@ export function createApp(config, store) {
           });
         }
 
-        const result = await createSignalWireCall(config, body);
+        assertAllowedDestination(config, callInput.to || config.signalWire.defaultTo);
+        const result = await createSignalWireCall(config, callInput);
         const callSid = result.response.sid || result.response.call_sid;
         if (callSid) {
           store.upsertCall(callSid, {
@@ -130,6 +139,10 @@ export function createApp(config, store) {
       if (req.method === "POST" && url.pathname === "/webhooks/signalwire/status") {
         const input = await readRequestBody(req);
         const payload = parseBody(input);
+        if (!signalWireSignatureOk(config, "status", req, payload)) {
+          logInteraction("Rejected SignalWire status webhook with invalid signature");
+          return send(res, 403, { error: "Invalid SignalWire signature" });
+        }
         logInteraction("Received SignalWire status webhook", {
           testId: url.searchParams.get("test_id") || undefined,
           callSid: payload.CallSid || payload.call_sid,
@@ -145,6 +158,10 @@ export function createApp(config, store) {
       if (req.method === "POST" && url.pathname === "/webhooks/signalwire/voice") {
         const input = await readRequestBody(req);
         const payload = parseBody(input);
+        if (!signalWireSignatureOk(config, "voice", req, payload)) {
+          logInteraction("Rejected SignalWire voice webhook with invalid signature");
+          return send(res, 403, { error: "Invalid SignalWire signature" });
+        }
         logInteraction("Received SignalWire voice webhook", {
           testId: url.searchParams.get("test_id") || undefined,
           callSid: payload.CallSid || payload.call_sid,
@@ -183,9 +200,19 @@ export function createApp(config, store) {
 
       return send(res, 404, { error: "Not found" });
     } catch (error) {
-      return send(res, error.status || 500, {
-        error: error.message || "Internal server error",
-        details: error.body,
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      // Only surface messages we deliberately marked safe (validation failures).
+      // Everything else — including upstream SignalWire responses — is logged
+      // server-side and returned generically to avoid leaking internal detail.
+      if (error.expose) {
+        return send(res, status, {
+          error: error.message,
+          ...(error.body ? { details: error.body } : {}),
+        });
+      }
+      logInteraction("Request failed", { status, message: error.message });
+      return send(res, status, {
+        error: status >= 500 ? "Internal server error" : "Request failed",
       });
     }
   };
@@ -383,7 +410,6 @@ function serviceInfo(config) {
       acceptedMethods: [
         "Authorization: Bearer <API_KEY>",
         "X-API-Key: <API_KEY>",
-        "api_key=<API_KEY> query parameter",
       ],
       publicEndpoints: [
         "GET /health",
@@ -411,6 +437,8 @@ function serviceInfo(config) {
       placetelSharedSecret: Boolean(config.placetel.sharedSecret),
       waitForPlacetelWebhook: config.placetel.waitForWebhook,
       placetelAction: config.placetel.action,
+      allowedToNumbers: config.allowedToNumbers.length,
+      signalWireVerifyWebhooks: config.signalWire.verifyWebhooks,
     },
   };
 }
@@ -429,27 +457,31 @@ function endpointDoc({ method, path, description, auth, query, body, responses }
 }
 
 async function startRoundTripTest({ body, config, store }) {
-  const missing = requireSignalWireConfig(config, body);
+  const callInput = definedOnly({ to: body.to, from: body.from });
+  const missing = requireSignalWireConfig(config, callInput);
   if (missing.length) {
     const error = new Error("Missing SignalWire configuration");
     error.status = 400;
     error.body = { missing };
+    error.expose = true;
     throw error;
   }
 
-  const callbackBase = body.publicBaseUrl || config.publicBaseUrl;
+  const to = callInput.to || config.signalWire.defaultTo;
+  assertAllowedDestination(config, to);
+
+  // Callback targets are derived from server config only; request-supplied URLs
+  // are not honored so callbacks cannot be redirected to an arbitrary host.
   const voiceWebhookUrl =
-    body.url ||
     config.signalWire.voiceWebhookUrl ||
-    `${callbackBase}/webhooks/signalwire/voice`;
+    `${config.publicBaseUrl}/webhooks/signalwire/voice`;
   const statusWebhookUrl =
-    body.statusCallback ||
     config.signalWire.statusWebhookUrl ||
-    `${callbackBase}/webhooks/signalwire/status`;
+    `${config.publicBaseUrl}/webhooks/signalwire/status`;
   const test = store.createTest({
-    to: body.to || config.signalWire.defaultTo,
-    from: body.from || config.signalWire.from,
-    timeoutMs: Number.parseInt(body.timeoutMs || config.signalWire.testTimeoutMs, 10),
+    to,
+    from: callInput.from || config.signalWire.from,
+    timeoutMs: clampTimeout(body.timeoutMs, config.signalWire.testTimeoutMs),
     waitForPlacetelWebhook: booleanFromInput(
       body.waitForPlacetelWebhook,
       config.placetel.waitForWebhook,
@@ -457,7 +489,7 @@ async function startRoundTripTest({ body, config, store }) {
   });
 
   const result = await createSignalWireCall(config, {
-    ...body,
+    ...callInput,
     statusCallback: appendQuery(statusWebhookUrl, "test_id", test.id),
     url: appendQuery(voiceWebhookUrl, "test_id", test.id),
   });
@@ -533,19 +565,94 @@ function requiresApiKey(config, req, url) {
   );
 }
 
-function isApiKeyAuthorized(config, req, url) {
+function isApiKeyAuthorized(config, req) {
   const header = req.headers.authorization || "";
   const bearerToken = header.startsWith("Bearer ")
     ? header.slice("Bearer ".length)
     : "";
-  const supplied =
-    bearerToken || req.headers["x-api-key"] || url.searchParams.get("api_key") || "";
+  // Header-only: the key is never read from the query string, which would leak
+  // it into proxy/access logs and browser history.
+  const supplied = bearerToken || req.headers["x-api-key"] || "";
   return safeEqual(String(config.apiKey), String(supplied));
+}
+
+// Fail closed: refuse to place calls (toll-fraud surface) unless an API_KEY is set.
+function requireApiKeyConfigured(config) {
+  if (config.apiKey) return;
+  const error = new Error("Server is not configured with an API_KEY; call creation is disabled.");
+  error.status = 503;
+  error.expose = true;
+  throw error;
+}
+
+function isAllowedDestination(config, to) {
+  if (!config.allowedToNumbers || config.allowedToNumbers.length === 0) return true;
+  if (!to) return false;
+  return config.allowedToNumbers.some((allowed) => phoneMatches(allowed, to));
+}
+
+function assertAllowedDestination(config, to) {
+  if (isAllowedDestination(config, to)) return;
+  const error = new Error("Destination number is not in ALLOWED_TO_NUMBERS");
+  error.status = 403;
+  error.expose = true;
+  error.body = { to: normalizePhone(to) };
+  throw error;
+}
+
+// Drop undefined keys so callInput never clobbers config defaults when spread.
+function definedOnly(obj) {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  );
+}
+
+function clampTimeout(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  const resolved = Number.isFinite(parsed) ? parsed : Number.parseInt(fallback, 10) || 0;
+  return Math.min(Math.max(resolved, 0), MAX_TIMEOUT_MS);
+}
+
+// Verify inbound SignalWire webhooks when they reach this server directly.
+// In "auto" mode an explicit SIGNALWIRE_*_WEBHOOK_URL means callbacks are routed
+// through a proxy/flow and won't carry a signature this server can validate, so
+// verification is skipped for that endpoint.
+function signalWireVerifyEnabled(config, kind) {
+  const mode = config.signalWire.verifyWebhooks;
+  if (mode === "off") return false;
+  if (!config.signalWire.token || !config.publicBaseUrl) return false;
+  if (mode === "on") return true;
+  const override =
+    kind === "voice"
+      ? config.signalWire.voiceWebhookUrl
+      : config.signalWire.statusWebhookUrl;
+  return !override;
+}
+
+function signalWireSignatureOk(config, kind, req, payload) {
+  if (!signalWireVerifyEnabled(config, kind)) return true;
+  const fullUrl = `${config.publicBaseUrl}${req.url}`;
+  return isValidSignalWireSignature(
+    config.signalWire.token,
+    fullUrl,
+    payload,
+    req.headers["x-signalwire-signature"],
+  );
 }
 
 async function readRequestBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  let total = 0;
+  for await (const chunk of req) {
+    total += chunk.length;
+    if (total > MAX_BODY_BYTES) {
+      const error = new Error("Request body too large");
+      error.status = 413;
+      error.expose = true;
+      throw error;
+    }
+    chunks.push(Buffer.from(chunk));
+  }
   const raw = Buffer.concat(chunks).toString("utf8");
   return {
     raw,
@@ -602,6 +709,11 @@ function sendXml(res, status, xml) {
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {
+  if (!config.apiKey) {
+    console.warn(
+      "WARNING: API_KEY is not set. Call-creating endpoints are disabled and read endpoints are unauthenticated.",
+    );
+  }
   const server = http.createServer(createApp(config, store));
   server.listen(config.port, config.host, () => {
     console.log(

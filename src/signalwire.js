@@ -1,19 +1,21 @@
 export async function createSignalWireCall(config, input) {
-  const baseUrl = input.baseUrl || config.signalWire.baseUrl;
-  const projectId = input.projectId || config.signalWire.projectId;
-  const token = input.token || config.signalWire.token;
+  // Credentials and the API base URL come only from server config — never from
+  // request input — so a caller cannot redirect the authenticated request to an
+  // arbitrary host or exfiltrate the SignalWire token (SSRF / credential leak).
+  const baseUrl = config.signalWire.baseUrl;
+  const projectId = config.signalWire.projectId;
+  const token = config.signalWire.token;
   const from = input.from || config.signalWire.from;
   const to = input.to || config.signalWire.defaultTo;
 
-  const callbackBase = input.publicBaseUrl || config.publicBaseUrl;
   const url =
     input.url ||
     config.signalWire.voiceWebhookUrl ||
-    `${callbackBase}/webhooks/signalwire/voice`;
+    `${config.publicBaseUrl}/webhooks/signalwire/voice`;
   const statusCallback =
     input.statusCallback ||
     config.signalWire.statusWebhookUrl ||
-    `${callbackBase}/webhooks/signalwire/status`;
+    `${config.publicBaseUrl}/webhooks/signalwire/status`;
 
   const params = new URLSearchParams({
     To: to,
