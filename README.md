@@ -335,3 +335,7 @@ SignalWire call creation uses Basic auth with `project_id:token` and posts to:
 ```
 
 Placetel sends `application/x-www-form-urlencoded` POST requests and, when a shared secret is configured, signs the raw payload with HMAC-SHA256 in the `X-PLACETEL-SIGNATURE` header.
+
+## License
+
+MIT License. Copyright (c) 2026 Sebastian Schumann <github@s-schumann.com>.
