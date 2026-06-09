@@ -235,7 +235,7 @@ function serviceInfo(config) {
       synchronousRoundTripCheck: endpointDoc({
         method: "GET",
         path: "/checks/round-trip",
-        auth: "Required when API_KEY is configured.",
+        auth: "Required. Call creation is disabled when API_KEY is unset.",
         description:
           "Starts a real SignalWire call, waits for SignalWire and Placetel callbacks, and returns one monitor-friendly result.",
         query: {
@@ -244,8 +244,6 @@ function serviceInfo(config) {
           waitForPlacetelWebhook: "Optional override. Use false when this tester cannot receive Placetel webhooks.",
           to: "Optional Placetel destination override. Default: DEFAULT_TO.",
           from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
-          url: "Optional SignalWire voice webhook override. Default: SIGNALWIRE_VOICE_WEBHOOK_URL or PUBLIC_BASE_URL.",
-          statusCallback: "Optional SignalWire status webhook override. Default: SIGNALWIRE_STATUS_WEBHOOK_URL or PUBLIC_BASE_URL.",
         },
         responses: {
           200: {
@@ -271,14 +269,12 @@ function serviceInfo(config) {
       initiateCall: endpointDoc({
         method: "POST",
         path: "/calls",
-        auth: "Required when API_KEY is configured.",
+        auth: "Required. Call creation is disabled when API_KEY is unset.",
         description:
           "Creates a raw SignalWire outbound call and logs callbacks, without pass/fail round-trip evaluation.",
         body: {
           to: "Optional destination override. Default: DEFAULT_TO.",
           from: "Optional caller ID override. Default: SIGNALWIRE_FROM.",
-          url: "Optional SignalWire voice webhook override.",
-          statusCallback: "Optional SignalWire status callback override.",
         },
         responses: {
           201: {
@@ -294,14 +290,12 @@ function serviceInfo(config) {
       startRoundTripTest: endpointDoc({
         method: "POST",
         path: "/tests",
-        auth: "Required when API_KEY is configured.",
+        auth: "Required. Call creation is disabled when API_KEY is unset.",
         description:
           "Starts a real round-trip test and returns immediately with the initial test state.",
         body: {
           to: "Optional Placetel destination override. Default: DEFAULT_TO.",
           from: "Optional SignalWire caller ID override. Default: SIGNALWIRE_FROM.",
-          url: "Optional SignalWire voice webhook override. Default: SIGNALWIRE_VOICE_WEBHOOK_URL or PUBLIC_BASE_URL.",
-          statusCallback: "Optional SignalWire status webhook override. Default: SIGNALWIRE_STATUS_WEBHOOK_URL or PUBLIC_BASE_URL.",
           timeoutMs: "Optional test timeout override.",
           waitForPlacetelWebhook: "Optional override. Use false when this tester cannot receive Placetel webhooks.",
         },

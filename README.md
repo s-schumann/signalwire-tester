@@ -23,12 +23,13 @@ Fill in:
 - `PUBLIC_BASE_URL`: the public HTTPS URL that SignalWire and Placetel can reach, for example an ngrok URL.
 - `SIGNALWIRE_VOICE_WEBHOOK_URL`: optional explicit voice/control callback URL for SignalWire. Use this when callbacks must route through a proxy.
 - `SIGNALWIRE_STATUS_WEBHOOK_URL`: optional explicit status callback URL for SignalWire. Use this when callbacks must route through a proxy.
-- `API_KEY`: optional shared key for non-webhook API endpoints.
+- `API_KEY`: required to enable call-creating endpoints. Send it with `Authorization: Bearer <API_KEY>` or `X-API-Key`.
 - `SIGNALWIRE_BASE_URL`: the full SignalWire LaML API base URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`. This may point at a proxy.
 - `SIGNALWIRE_PROJECT_ID`
 - `SIGNALWIRE_TOKEN`
 - `SIGNALWIRE_FROM`: a SignalWire-owned caller ID in E.164 format.
 - `DEFAULT_TO`: the Placetel number to call, in E.164 format.
+- `ALLOWED_TO_NUMBERS`: recommended destination allowlist for call-creating endpoints, comma-separated in E.164 format. Set this to the expected Placetel destination number in production.
 - `TEST_TIMEOUT_MS`: how long a round-trip test may wait before it is considered failed.
 - `WAIT_FOR_PLACETEL_WEBHOOK`: set to `false` when this tester cannot receive Placetel webhooks because Placetel points to another tester URL.
 
@@ -114,6 +115,8 @@ SIGNALWIRE_PROJECT_ID=your-project-id
 SIGNALWIRE_TOKEN=your-token
 SIGNALWIRE_FROM=+496990009000
 DEFAULT_TO=+493023125000
+ALLOWED_TO_NUMBERS=+493023125000
+SIGNALWIRE_VERIFY_WEBHOOKS=auto
 TEST_TIMEOUT_MS=120000
 WAIT_FOR_PLACETEL_WEBHOOK=true
 PLACETEL_SHARED_SECRET=your-placetel-secret
@@ -169,6 +172,8 @@ curl -H 'Authorization: Bearer change-me' 'http://localhost:3000/checks/round-tr
 The API key is read only from the `Authorization`/`X-API-Key` headers; the
 `api_key` query parameter is not accepted (it would leak the key into access
 logs). Call-creating endpoints are disabled entirely when `API_KEY` is unset.
+Set `ALLOWED_TO_NUMBERS` in production so compromised credentials cannot place
+calls to arbitrary destinations.
 
 ## Start A Round-Trip Test
 
@@ -264,10 +269,15 @@ curl -X POST http://localhost:3000/calls \
   }'
 ```
 
-The call request sends SignalWire these callback URLs unless overridden in the request:
+The call request sends SignalWire these callback URLs. They come only from server
+configuration and cannot be overridden per request:
 
 - `Url`: `${PUBLIC_BASE_URL}/webhooks/signalwire/voice`
 - `StatusCallback`: `${PUBLIC_BASE_URL}/webhooks/signalwire/status`
+
+If `SIGNALWIRE_VOICE_WEBHOOK_URL` and `SIGNALWIRE_STATUS_WEBHOOK_URL` are set,
+those configured URLs are used instead. Round-trip tests append `test_id` to both
+configured callback URLs.
 
 It requests these status callback events:
 
