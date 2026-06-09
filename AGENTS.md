@@ -222,6 +222,24 @@ docker buildx build \
 - Prefer focused tests around webhook correlation and endpoint response codes.
 - If changing Placetel XML actions, verify expected XML in `test/xml.test.js`.
 
+## Commit Policy
+
+Use Conventional Commit-style prefixes for all commits:
+
+- `feat:` for new product behavior.
+- `fix:` for bug fixes and compatibility corrections.
+- `docs:` for documentation-only changes.
+- `chore:` for CI, container, maintenance, metadata, and repository hygiene.
+- `test:` for test-only changes.
+- `refactor:` for behavior-preserving code restructuring.
+
+Keep commit messages short and imperative, for example:
+
+- `feat: add TwiML bridge`
+- `fix: default Gather input to digits`
+- `docs: add JACK product positioning`
+- `chore: add GitLab CI pipeline`
+
 ## Useful Commands
 
 ```sh
