@@ -47,6 +47,7 @@ SIGNALWIRE_STATUS_WEBHOOK_URL=
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
 SIGNALWIRE_TOKEN=your-token
+SIGNALWIRE_SIGNING_KEY=PSK_abc123example
 SIGNALWIRE_FROM=+496990009000
 DEFAULT_TO=+493023125000
 ALLOWED_TO_NUMBERS=+493023125000
@@ -77,7 +78,10 @@ are disabled and return `503` when `API_KEY` is unset.
 Webhook endpoints and `GET /health` intentionally remain public. Inbound
 SignalWire webhooks are signature-verified per `SIGNALWIRE_VERIFY_WEBHOOKS`
 (`auto`|`on`|`off`); `auto` verifies only when no `SIGNALWIRE_*_WEBHOOK_URL`
-override is set (i.e. callbacks reach this server directly).
+override is set (i.e. callbacks reach this server directly). Verification
+accepts either `X-SignalWire-Signature` or the Twilio-compatible
+`X-Twilio-Signature` header and uses `SIGNALWIRE_SIGNING_KEY` when set, falling
+back to `SIGNALWIRE_TOKEN` for older deployments.
 
 ## Key Endpoints
 

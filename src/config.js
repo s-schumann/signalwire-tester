@@ -36,6 +36,7 @@ export function readConfig(env = process.env) {
       baseUrl: cleanBaseUrl(env.SIGNALWIRE_BASE_URL || ""),
       projectId: env.SIGNALWIRE_PROJECT_ID || "",
       token: env.SIGNALWIRE_TOKEN || "",
+      signingKey: env.SIGNALWIRE_SIGNING_KEY || "",
       from: env.SIGNALWIRE_FROM || "",
       defaultTo: env.DEFAULT_TO || "",
       voiceWebhookUrl: env.SIGNALWIRE_VOICE_WEBHOOK_URL || "",

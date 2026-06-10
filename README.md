@@ -27,6 +27,7 @@ Fill in:
 - `SIGNALWIRE_BASE_URL`: the full SignalWire LaML API base URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`. This may point at a proxy.
 - `SIGNALWIRE_PROJECT_ID`
 - `SIGNALWIRE_TOKEN`
+- `SIGNALWIRE_SIGNING_KEY`: the SignalWire API Credentials signing key, used to verify direct inbound SignalWire webhooks.
 - `SIGNALWIRE_FROM`: a SignalWire-owned caller ID in E.164 format.
 - `DEFAULT_TO`: the Placetel number to call, in E.164 format.
 - `ALLOWED_TO_NUMBERS`: recommended destination allowlist for call-creating endpoints, comma-separated in E.164 format. Set this to the expected Placetel destination number in production.
@@ -113,6 +114,7 @@ SIGNALWIRE_STATUS_WEBHOOK_URL=
 SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
 SIGNALWIRE_TOKEN=your-token
+SIGNALWIRE_SIGNING_KEY=PSK_abc123example
 SIGNALWIRE_FROM=+496990009000
 DEFAULT_TO=+493023125000
 ALLOWED_TO_NUMBERS=+493023125000
@@ -155,6 +157,11 @@ When `API_KEY` is set, non-webhook API endpoints require authentication:
 - `GET /events`
 
 Webhook endpoints and `GET /health` remain public so SignalWire, Placetel, and platform health checks can reach them.
+Inbound SignalWire direct callbacks are signature-verified per
+`SIGNALWIRE_VERIFY_WEBHOOKS` and accept either the `X-SignalWire-Signature` or
+Twilio-compatible `X-Twilio-Signature` header. Direct verification uses
+`SIGNALWIRE_SIGNING_KEY`; if it is unset, the app falls back to
+`SIGNALWIRE_TOKEN` for compatibility with older deployments.
 
 Preferred header:
 

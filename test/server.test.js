@@ -415,7 +415,8 @@ test("SignalWire status webhook requires a valid signature in direct mode", asyn
     PUBLIC_BASE_URL: "https://tester.example",
     SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
     SIGNALWIRE_PROJECT_ID: "project-id",
-    SIGNALWIRE_TOKEN: "token",
+    SIGNALWIRE_TOKEN: "api-token",
+    SIGNALWIRE_SIGNING_KEY: "signing-key",
     SIGNALWIRE_FROM: "+496990009000",
     DEFAULT_TO: "+493023125000",
   });
@@ -431,7 +432,7 @@ test("SignalWire status webhook requires a valid signature in direct mode", asyn
   });
   assert.equal(unsigned.status, 403);
 
-  const signature = signalWireSignature("token", `https://tester.example${path}`, params);
+  const signature = signalWireSignature("signing-key", `https://tester.example${path}`, params);
   const signed = await request(path, {
     method: "POST",
     headers: {
@@ -441,6 +442,34 @@ test("SignalWire status webhook requires a valid signature in direct mode", asyn
     body,
   });
   assert.equal(signed.status, 200);
+});
+
+test("SignalWire status webhook accepts Twilio-compatible signature header", async () => {
+  const request = createTestRequest({
+    PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id",
+    SIGNALWIRE_TOKEN: "api-token",
+    SIGNALWIRE_SIGNING_KEY: "signing-key",
+    SIGNALWIRE_FROM: "+496990009000",
+    DEFAULT_TO: "+493023125000",
+  });
+
+  const path = "/webhooks/signalwire/status?test_id=abc";
+  const body = "CallSid=SW1&CallStatus=completed";
+  const params = Object.fromEntries(new URLSearchParams(body));
+  const signature = signalWireSignature("signing-key", `https://tester.example${path}`, params);
+
+  const response = await request(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "X-Twilio-Signature": signature,
+    },
+    body,
+  });
+
+  assert.equal(response.status, 200);
 });
 
 test("SignalWire signature check is skipped when a callback URL override is set", async () => {

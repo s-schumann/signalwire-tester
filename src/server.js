@@ -425,6 +425,7 @@ function serviceInfo(config) {
       signalWireBaseUrl: Boolean(config.signalWire.baseUrl),
       signalWireProjectId: Boolean(config.signalWire.projectId),
       signalWireToken: Boolean(config.signalWire.token),
+      signalWireSigningKey: Boolean(config.signalWire.signingKey),
       signalWireFrom: Boolean(config.signalWire.from),
       signalWireVoiceWebhookUrl: Boolean(config.signalWire.voiceWebhookUrl),
       signalWireStatusWebhookUrl: Boolean(config.signalWire.statusWebhookUrl),
@@ -614,7 +615,7 @@ function clampTimeout(value, fallback) {
 function signalWireVerifyEnabled(config, kind) {
   const mode = config.signalWire.verifyWebhooks;
   if (mode === "off") return false;
-  if (!config.signalWire.token || !config.publicBaseUrl) return false;
+  if (!signalWireSigningSecret(config) || !config.publicBaseUrl) return false;
   if (mode === "on") return true;
   const override =
     kind === "voice"
@@ -627,11 +628,19 @@ function signalWireSignatureOk(config, kind, req, payload) {
   if (!signalWireVerifyEnabled(config, kind)) return true;
   const fullUrl = `${config.publicBaseUrl}${req.url}`;
   return isValidSignalWireSignature(
-    config.signalWire.token,
+    signalWireSigningSecret(config),
     fullUrl,
     payload,
-    req.headers["x-signalwire-signature"],
+    signalWireSignatureHeader(req.headers),
   );
+}
+
+function signalWireSigningSecret(config) {
+  return config.signalWire.signingKey || config.signalWire.token;
+}
+
+function signalWireSignatureHeader(headers) {
+  return headers["x-signalwire-signature"] || headers["x-twilio-signature"] || "";
 }
 
 async function readRequestBody(req) {
@@ -681,6 +690,8 @@ function selectedHeaders(headers) {
     "content-type": headers["content-type"],
     "user-agent": headers["user-agent"],
     "x-placetel-signature": headers["x-placetel-signature"],
+    "x-signalwire-signature": headers["x-signalwire-signature"],
+    "x-twilio-signature": headers["x-twilio-signature"],
   };
 }
 
