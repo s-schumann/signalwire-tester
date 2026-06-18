@@ -34,6 +34,10 @@ export function createApp(config, store) {
         return send(res, 200, { ok: true, time: new Date().toISOString() });
       }
 
+      if (req.method === "GET" && url.pathname === "/weekday") {
+        return sendText(res, 200, currentWeekday());
+      }
+
       if (req.method === "GET" && url.pathname === "/checks/round-trip") {
         requireApiKeyConfigured(config);
         const body = Object.fromEntries(url.searchParams.entries());
@@ -232,6 +236,14 @@ function serviceInfo(config) {
           200: { ok: true, time: "2026-05-19T08:55:30.209Z" },
         },
       }),
+      weekday: endpointDoc({
+        method: "GET",
+        path: "/weekday",
+        description: "Prints the current weekday.",
+        responses: {
+          200: "Thursday",
+        },
+      }),
       synchronousRoundTripCheck: endpointDoc({
         method: "GET",
         path: "/checks/round-trip",
@@ -407,6 +419,7 @@ function serviceInfo(config) {
       ],
       publicEndpoints: [
         "GET /health",
+        "GET /weekday",
         "POST /webhooks/signalwire/status",
         "POST /webhooks/signalwire/voice",
         "POST /webhooks/placetel",
@@ -550,6 +563,7 @@ function requiresApiKey(config, req, url) {
 
   const publicRoutes = [
     ["GET", "/health"],
+    ["GET", "/weekday"],
     ["POST", "/webhooks/signalwire/status"],
     ["POST", "/webhooks/signalwire/voice"],
     ["POST", "/webhooks/placetel"],
@@ -606,6 +620,10 @@ function clampTimeout(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   const resolved = Number.isFinite(parsed) ? parsed : Number.parseInt(fallback, 10) || 0;
   return Math.min(Math.max(resolved, 0), MAX_TIMEOUT_MS);
+}
+
+function currentWeekday() {
+  return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
 }
 
 // Verify inbound SignalWire webhooks when they reach this server directly.
@@ -711,6 +729,14 @@ function sendXml(res, status, xml) {
     "Content-Length": Buffer.byteLength(xml),
   });
   res.end(xml);
+}
+
+function sendText(res, status, text) {
+  res.writeHead(status, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Length": Buffer.byteLength(text),
+  });
+  res.end(text);
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {

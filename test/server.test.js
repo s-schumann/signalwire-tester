@@ -72,6 +72,19 @@ test("API key works via X-API-Key header but not via query parameter", async () 
   assert.equal(queryResponse.status, 401);
 });
 
+test("Weekday endpoint prints the current weekday without API auth", async () => {
+  const request = createTestRequest({ API_KEY: "secret-key" }, { autoAuth: false });
+
+  const response = await request("/weekday");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "text/plain; charset=utf-8");
+  assert.equal(
+    await response.text(),
+    new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()),
+  );
+});
+
 test("Round-trip test fails until all required callback types are present", async () => {
   const request = createTestRequest({
     PUBLIC_BASE_URL: "https://tester.example",
