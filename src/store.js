@@ -250,9 +250,7 @@ export function phoneMatches(left, right) {
   return leftCandidates.some((leftCandidate) =>
     rightCandidates.some(
       (rightCandidate) =>
-        leftCandidate === rightCandidate ||
-        leftCandidate.endsWith(rightCandidate) ||
-        rightCandidate.endsWith(leftCandidate),
+        Boolean(leftCandidate) && leftCandidate === rightCandidate,
     ),
   );
 }

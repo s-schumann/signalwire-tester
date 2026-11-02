@@ -8,11 +8,12 @@ The main goal is to verify that a real outbound SignalWire call reaches the Plac
 
 ## Runtime
 
-- Node.js >= 20
+- Security-patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ within those release lines
 - No npm runtime dependencies
 - Entry point: `src/server.js`
 - Start command: `npm start`
 - Test command: `npm test`
+- Static check: `npm run check`
 - Default port: `3000`
 
 The app loads `.env` automatically from the repo root before reading config.
@@ -146,7 +147,9 @@ docker run --rm -p 3000:3000 --env-file .env \
   signalwire-placetel-tester
 ```
 
-Docker was not available in the local Codex environment when this file was written, so the Dockerfile was not built locally. `npm test` passed.
+Docker amd64 builds, the Node test suite in the scratch runtime, and the
+network-isolated container smoke test were verified on 2026-11-02. See README.md
+for commands and VULNERABILITIES.md for scan results.
 
 ## Versioning And Release Policy
 

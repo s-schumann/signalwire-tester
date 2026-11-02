@@ -14,6 +14,9 @@ It provides:
 
 ## Setup
 
+Use a supported, security-patched Node.js release: 22.23.4+, 24.22.1+, or
+26.12.1+ within those release lines. The Docker image pins Node 22.23.4.
+
 ```sh
 cp .env.example .env
 ```
@@ -74,21 +77,46 @@ Build the image:
 docker build -t signalwire-placetel-tester .
 ```
 
-Build and publish the current production image:
+Test the production runtime (no live provider credentials or external network):
 
 ```sh
-git pull && docker buildx build \
-  --platform linux/amd64 --provenance=true --sbom=true \
-  --push -t schumann/signalwire-tester:latest \
+npm run check
+npm test
+docker buildx build --platform linux/amd64 --pull --load \
+  -t signalwire-placetel-tester:check .
+docker run --rm --platform linux/amd64 --network none \
+  --mount "type=bind,source=$PWD/test,target=/app/test,readonly" \
+  signalwire-placetel-tester:check node --test
+docker run --rm --platform linux/amd64 --network none \
+  --mount "type=bind,source=$PWD/scripts,target=/app/scripts,readonly" \
+  signalwire-placetel-tester:check node scripts/smoke-container.mjs
+docker scout cves local://signalwire-placetel-tester:check
+```
+
+After committing and validating changes, create a patch release and publish all
+aliases from one build. `latest` always follows the latest tagged release.
+Versions below 1.0 remain unstable; security fixes use patch releases.
+
+```sh
+npm version patch -m "chore(release): %s"
+git push origin master --tags
+COMMIT_SHA=$(git rev-parse HEAD)
+VERSION_TAG=v$(node -p "require('./package.json').version")
+docker buildx build \
+  --platform linux/amd64 --provenance=mode=max --sbom=true \
+  --push \
+  -t "schumann/signalwire-tester:$COMMIT_SHA" \
+  -t "schumann/signalwire-tester:$VERSION_TAG" \
+  -t schumann/signalwire-tester:latest \
   .
 ```
 
-The production image builds from `node:22-alpine`, then publishes a `scratch`
-runtime image containing only the Node binary, required shared libraries, CA
-certificates, and the application files. This removes npm/npx, mitigating Docker
-Scout finding `CVE-2026-33671` in npm's bundled `picomatch@4.0.3`. It also avoids
-shipping Alpine's BusyBox package in the final image, which removes the remaining
-BusyBox CVE from Scout.
+The production image pins `node:22.23.4-alpine3.24` by digest and updates the
+copied Alpine runtime libraries, then publishes a non-root `scratch` image with
+Node, required shared libraries, CA certificates, and the application files.
+It retains OS and package metadata for vulnerability scanning, while npm/npx,
+BusyBox, and the package manager are absent. See [VULNERABILITIES.md](VULNERABILITIES.md)
+for the current review and the verified musl scanner false positive.
 
 To verify the Scout result:
 

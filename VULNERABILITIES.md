@@ -1,5 +1,73 @@
 # Security Review — signalwire-placetel-tester
 
+## Current review — 2026-11-02 (release 0.1.2)
+
+Scope: all application source, Node security advisories, the published amd64
+image, the pinned Node base image, and the rebuilt scratch runtime. The app has
+no npm dependencies. Tests use dummy credentials and a loopback provider; no
+live SignalWire call is made by the automated container checks.
+
+### Runtime CVEs
+
+The previous published image index was
+`sha256:ccfc1096896bece503a100001d31f6707a3dab04202c188f485a5e4389891237`
+(release 0.1.1). Its Node version was 22.22.3. Docker Scout reported 27 Node
+vulnerabilities: **1 critical, 10 high, 11 medium, 5 low**.
+
+The Dockerfile now pins Node **22.23.4** on Alpine **3.24**, including the
+[October Node security fixes](https://nodejs.org/en/blog/release/v22.23.4).
+These address DNS validation, TLS hostname validation, HTTP connection reuse,
+Brotli memory corruption, snapshot entropy reuse, and permission checks.
+The [full upstream advisory](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)
+also describes when each issue is exploitable; package findings alone do not
+prove that every issue can be reached through this app.
+
+Runtime library updates are applied before copying files into scratch. The final
+image now retains Alpine OS metadata and package records for musl, libgcc,
+libstdc++, and the certificate bundle. This lets scanners see copied libraries
+that were absent from the old image's two-package SBOM. npm, npx, BusyBox,
+shells, and the package manager remain absent.
+
+Docker Scout 1.27.0 on the rebuilt runtime reports **0 critical, 0 high,
+0 medium, 0 low, and 1 unspecified** finding. The remaining finding is a
+verified false positive:
+
+| Finding | Installed package | Scanner threshold | Upstream evidence |
+| --- | --- | --- | --- |
+| CVE-2026-107891 | Alpine 3.24 musl 1.2.6-r3 | Scout claims fixed in 1.2.6-r6 | Alpine's [security database](https://secdb.alpinelinux.org/v3.24/main.json) records the fix in 1.2.6-r3; its [APKBUILD](https://github.com/alpinelinux/aports/blob/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e/main/musl/APKBUILD) includes `CVE-2026-107891.patch` and the matching `secfixes` entry. |
+
+The package repository also offers 1.2.6-r3 as the latest revision. The finding
+has not been hidden or suppressed, and the installed package version has not
+been relabeled. Recheck Alpine's security database and raw scan on future builds.
+
+### Application fixes
+
+- **Destination allowlist and callback correlation bypass:** suffix matching
+  accepted partial numbers such as `5000` for `+493023125000`. Matching now
+  requires equality of full normalized numbers, including German national/E.164
+  equivalents. Configured allowlists also reject SIP URIs and dial-control
+  strings, which must not be normalized into an allowed telephone number.
+- **Forced webhook verification failed open:** `SIGNALWIRE_VERIFY_WEBHOOKS=on`
+  previously skipped verification when the signing secret or `PUBLIC_BASE_URL`
+  was missing. Both SignalWire webhook endpoints now return `403` in that case.
+  Existing `auto` and `off` routing behavior is preserved.
+
+### Validation
+
+- `npm run check` and all 25 Node tests pass.
+- All 25 tests also pass under Node 22.23.4 in the amd64 scratch runtime.
+- `scripts/smoke-container.mjs` exercises the actual server process in a
+  container with external networking disabled: non-root execution, package
+  metadata, excluded secrets/tools, HTTP API authentication, rejected unsigned
+  webhooks, signed voice/status/Placetel callbacks, full round-trip `200`, missing
+  callback `503`, destination rejection, XML responses, and clean SIGTERM.
+- Scan all severities with `docker scout cves IMAGE`; do not claim an entirely
+  empty raw report while the musl database mismatch remains.
+
+The sections below preserve the earlier source review and remediation history.
+
+---
+
 Date: 2026-06-09
 Scope: application source (`src/`), Dockerfile, configuration handling. This is a
 source-level review and complements (does not replace) the Docker Scout dependency

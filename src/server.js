@@ -582,7 +582,9 @@ function requireApiKeyConfigured(config) {
 
 function isAllowedDestination(config, to) {
   if (!config.allowedToNumbers || config.allowedToNumbers.length === 0) return true;
-  if (!to) return false;
+  // Compare telephone numbers only; stripping digits from a SIP URI or dial
+  // string could otherwise make a different destination resemble an allowed one.
+  if (typeof to !== "string" || !/^\+?[\d ().-]+$/.test(to)) return false;
   return config.allowedToNumbers.some((allowed) => phoneMatches(allowed, to));
 }
 
@@ -615,8 +617,8 @@ function clampTimeout(value, fallback) {
 function signalWireVerifyEnabled(config, kind) {
   const mode = config.signalWire.verifyWebhooks;
   if (mode === "off") return false;
-  if (!signalWireSigningSecret(config) || !config.publicBaseUrl) return false;
   if (mode === "on") return true;
+  if (!signalWireSigningSecret(config) || !config.publicBaseUrl) return false;
   const override =
     kind === "voice"
       ? config.signalWire.voiceWebhookUrl
@@ -626,6 +628,7 @@ function signalWireVerifyEnabled(config, kind) {
 
 function signalWireSignatureOk(config, kind, req, payload) {
   if (!signalWireVerifyEnabled(config, kind)) return true;
+  if (!signalWireSigningSecret(config) || !config.publicBaseUrl) return false;
   const fullUrl = `${config.publicBaseUrl}${req.url}`;
   return isValidSignalWireSignature(
     signalWireSigningSecret(config),

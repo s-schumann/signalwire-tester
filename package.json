@@ -7,9 +7,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "check": "node --check src/config.js && node --check src/logger.js && node --check src/server.js && node --check src/signalwire.js && node --check src/signature.js && node --check src/store.js && node --check src/xml.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
   }
 }

@@ -488,6 +488,28 @@ test("SignalWire signature check is skipped when a callback URL override is set"
   assert.equal(response.status, 200);
 });
 
+test("Forced SignalWire verification rejects webhooks when configuration is missing", async () => {
+  for (const env of [
+    { PUBLIC_BASE_URL: "https://tester.example" },
+    { SIGNALWIRE_SIGNING_KEY: "signing-key" },
+  ]) {
+    const { request, store } = createTestRequestWithStore({
+      ...env,
+      SIGNALWIRE_VERIFY_WEBHOOKS: "on",
+    });
+
+    for (const kind of ["status", "voice"]) {
+      const response = await request(`/webhooks/signalwire/${kind}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "CallSid=SW1&CallStatus=completed",
+      });
+      assert.equal(response.status, 403);
+    }
+    assert.equal(store.listEvents().length, 0);
+  }
+});
+
 test("Destination outside ALLOWED_TO_NUMBERS is rejected before placing a call", async () => {
   const request = createTestRequest({
     PUBLIC_BASE_URL: "https://tester.example",
@@ -511,20 +533,31 @@ test("Destination outside ALLOWED_TO_NUMBERS is rejected before placing a call",
   };
 
   try {
-    const rejected = await request("/calls", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to: "+1900555000" }),
-    });
-    assert.equal(rejected.status, 403);
+    for (const to of [
+      "+1900555000", "5000", "+1493023125000",
+      "sip:+493023125000@attacker.example", "+493023125000#",
+    ]) {
+      for (const path of ["/calls", "/tests"]) {
+        const rejected = await request(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to }),
+        });
+        assert.equal(rejected.status, 403, `${path} must reject ${to}`);
+      }
+      const check = await request(`/checks/round-trip?to=${encodeURIComponent(to)}`);
+      assert.equal(check.status, 403);
+    }
     assert.equal(fetchCalled, false);
 
-    const allowed = await request("/calls", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to: "+493023125000" }),
-    });
-    assert.equal(allowed.status, 201);
+    for (const to of ["+493023125000", "00493023125000", "03023125000"]) {
+      const allowed = await request("/calls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to }),
+      });
+      assert.equal(allowed.status, 201);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
