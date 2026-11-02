@@ -121,6 +121,8 @@ try {
     const response = await request(`/webhooks/${path}`, { method: "POST", body: "event=IncomingCall" }, false);
     assert.equal(response.status, path === "placetel" ? 401 : 403);
   }
+  assert.deepEqual((await (await request("/events")).json()).events, []);
+  assert.deepEqual((await (await request("/calls")).json()).calls, []);
   const blocked = await request("/calls", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: "5000" }),

@@ -7,7 +7,7 @@ import { createApp } from "../src/server.js";
 import { EventStore } from "../src/store.js";
 
 test("Placetel webhook rejects invalid HMAC", async () => {
-  const request = createTestRequest({
+  const { request, store } = createTestRequestWithStore({
     PLACETEL_SHARED_SECRET: "secret",
   });
 
@@ -18,6 +18,14 @@ test("Placetel webhook rejects invalid HMAC", async () => {
   });
 
   assert.equal(response.status, 401);
+  assert.equal(store.listEvents().length, 0);
+  assert.equal(store.listCalls().length, 0);
+
+  const malformed = await request("/webhooks/placetel", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{not-json",
+  });
+  assert.equal(malformed.status, 401);
+  assert.equal(store.listEvents().length, 0);
 });
 
 test("Placetel webhook accepts valid HMAC and returns XML", async () => {
@@ -70,6 +78,22 @@ test("API key works via X-API-Key header but not via query parameter", async () 
 
   assert.equal(headerResponse.status, 200);
   assert.equal(queryResponse.status, 401);
+});
+
+test("API index exposes secret configuration only as booleans", async () => {
+  const env = {
+    API_KEY: "private-api-key-value", SIGNALWIRE_TOKEN: "private-token-value",
+    SIGNALWIRE_SIGNING_KEY: "private-signing-value", PLACETEL_SHARED_SECRET: "private-placetel-value",
+  };
+  const response = await createTestRequest(env)("/");
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  for (const secret of Object.values(env)) assert.equal(text.includes(secret), false);
+  const body = JSON.parse(text);
+  assert.equal(body.configured.apiKey, true);
+  assert.equal(body.configured.signalWireToken, true);
+  assert.equal(body.configured.signalWireSigningKey, true);
+  assert.equal(body.configured.placetelSharedSecret, true);
 });
 
 test("Round-trip test fails until all required callback types are present", async () => {
@@ -592,6 +616,28 @@ test("Call creation is disabled when API_KEY is not configured", async () => {
   });
 
   assert.equal(response.status, 503);
+});
+
+test("Failed call creation leaves a failed test without leaking upstream detail", async () => {
+  const { request, store } = createTestRequestWithStore({
+    API_KEY: "test-key", PUBLIC_BASE_URL: "https://tester.example",
+    SIGNALWIRE_BASE_URL: "https://signalwire.example/api/laml/2010-04-01",
+    SIGNALWIRE_PROJECT_ID: "project-id", SIGNALWIRE_TOKEN: "test-token",
+    SIGNALWIRE_FROM: "+496990009000", DEFAULT_TO: "+493023125000",
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("private upstream details"); };
+  try {
+    const response = await request("/tests", { method: "POST", body: "" });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { error: "Internal server error" });
+    const [roundTrip] = store.listTests();
+    assert.equal(roundTrip.status, "failed");
+    assert.equal(roundTrip.ok, false);
+    assert.equal(roundTrip.reason, "SignalWire call creation failed.");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 function signalWireSignature(token, fullUrl, params) {

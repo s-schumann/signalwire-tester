@@ -1,3 +1,5 @@
+const MAX_RESPONSE_BYTES = 256 * 1024;
+
 export async function createSignalWireCall(config, input) {
   // Credentials and the API base URL come only from server config — never from
   // request input — so a caller cannot redirect the authenticated request to an
@@ -43,17 +45,28 @@ export async function createSignalWireCall(config, input) {
   }
 
   const endpoint = `${baseUrl}/Accounts/${projectId}/Calls.json`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${projectId}:${token}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: params,
-  });
+  let response;
+  let text;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(config.signalWire.requestTimeoutMs || 15000),
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${projectId}:${token}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: params,
+    });
+    text = await readResponseText(response);
+  } catch (cause) {
+    const timedOut = cause.name === "TimeoutError" || cause.name === "AbortError";
+    const error = new Error(timedOut ? "SignalWire request timed out" : "SignalWire request failed", { cause });
+    error.status = timedOut ? 504 : 502;
+    throw error;
+  }
 
-  const text = await response.text();
   let body;
   try {
     body = JSON.parse(text);
@@ -62,8 +75,8 @@ export async function createSignalWireCall(config, input) {
   }
 
   if (!response.ok) {
-    const message = body?.message || body?.error || text || response.statusText;
-    const error = new Error(`SignalWire call creation failed: ${message}`);
+    // Do not copy arbitrary upstream text (possibly credentials) into logs.
+    const error = new Error("SignalWire call creation failed");
     error.status = response.status;
     error.body = body;
     throw error;
@@ -79,4 +92,16 @@ export async function createSignalWireCall(config, input) {
     },
     response: body,
   };
+}
+
+async function readResponseText(response) {
+  if (!response.body) return "";
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of response.body) {
+    bytes += chunk.length;
+    if (bytes > MAX_RESPONSE_BYTES) throw new Error("SignalWire response too large");
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }

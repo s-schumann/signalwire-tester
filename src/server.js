@@ -8,10 +8,6 @@ import { createSignalWireCall } from "./signalwire.js";
 import { EventStore, normalizePhone, phoneMatches } from "./store.js";
 import { placetelControlXml, signalWireVoiceXml } from "./xml.js";
 
-loadDotEnv();
-const config = readConfig();
-const store = new EventStore();
-
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_TIMEOUT_MS = 600000;
 
@@ -179,9 +175,6 @@ export function createApp(config, store) {
         const signature = req.headers["x-placetel-signature"] || "";
         if (!isValidPlacetelSignature(config.placetel.sharedSecret, input.raw, signature)) {
           logInteraction("Rejected Placetel webhook with invalid signature");
-          await store.record("placetel.signature.invalid", parseBody(input), {
-            headers: selectedHeaders(req.headers),
-          });
           return send(res, 401, { error: "Invalid Placetel signature" });
         }
 
@@ -483,11 +476,17 @@ async function startRoundTripTest({ body, config, store }) {
     ),
   });
 
-  const result = await createSignalWireCall(config, {
-    ...callInput,
-    statusCallback: appendQuery(statusWebhookUrl, "test_id", test.id),
-    url: appendQuery(voiceWebhookUrl, "test_id", test.id),
-  });
+  let result;
+  try {
+    result = await createSignalWireCall(config, {
+      ...callInput,
+      statusCallback: appendQuery(statusWebhookUrl, "test_id", test.id),
+      url: appendQuery(voiceWebhookUrl, "test_id", test.id),
+    });
+  } catch (error) {
+    store.markTestCallFailed(test.id);
+    throw error;
+  }
 
   const callSid = result.response.sid || result.response.call_sid;
   logInteraction("SignalWire call created for round-trip test", {
@@ -717,6 +716,9 @@ function sendXml(res, status, xml) {
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {
+  loadDotEnv();
+  const config = readConfig();
+  const store = new EventStore();
   if (!config.apiKey) {
     console.warn(
       "WARNING: API_KEY is not set. Call-creating endpoints are disabled and read endpoints are unauthenticated.",

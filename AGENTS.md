@@ -29,6 +29,7 @@ The app loads `.env` automatically from the repo root before reading config.
 - `README.md`: user-facing setup, API, Docker, and operations docs.
 - `Dockerfile`: production container image definition.
 - `.env.example`: config template.
+- `SECURITY_REVIEW.md`, `CLAUDE.md`: independent security review handoff and known limits.
 
 ## Secrets And Local Config
 
@@ -49,6 +50,7 @@ SIGNALWIRE_BASE_URL=https://{space}.signalwire.com/api/laml/2010-04-01
 SIGNALWIRE_PROJECT_ID=your-project-id
 SIGNALWIRE_TOKEN=your-token
 SIGNALWIRE_SIGNING_KEY=PSK_abc123example
+SIGNALWIRE_REQUEST_TIMEOUT_MS=15000
 SIGNALWIRE_FROM=+496990009000
 DEFAULT_TO=+493023125000
 ALLOWED_TO_NUMBERS=+493023125000
@@ -83,6 +85,11 @@ override is set (i.e. callbacks reach this server directly). Verification
 accepts either `X-SignalWire-Signature` or the Twilio-compatible
 `X-Twilio-Signature` header and uses `SIGNALWIRE_SIGNING_KEY` when set, falling
 back to `SIGNALWIRE_TOKEN` for older deployments.
+
+`SIGNALWIRE_REQUEST_TIMEOUT_MS` bounds provider call creation and response-body
+reading (default 15000, clamped to 1..60000 ms). Provider redirects are refused,
+responses are limited to 256 KiB, and failed creation leaves a failed test.
+Importing the server for tests/review does not load `.env`; normal startup does.
 
 ## Key Endpoints
 
@@ -147,8 +154,8 @@ docker run --rm -p 3000:3000 --env-file .env \
   signalwire-placetel-tester
 ```
 
-Docker amd64 builds, the Node test suite in the scratch runtime, and the
-network-isolated container smoke test were verified on 2026-11-02. See README.md
+Docker amd64 builds, all 38 Node tests in the scratch runtime, static checks, and
+the network-isolated container smoke test were verified on 2026-11-02. See README.md
 for commands and VULNERABILITIES.md for scan results.
 
 ## Versioning And Release Policy

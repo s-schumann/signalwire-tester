@@ -42,6 +42,7 @@ export function readConfig(env = process.env) {
       voiceWebhookUrl: env.SIGNALWIRE_VOICE_WEBHOOK_URL || "",
       statusWebhookUrl: env.SIGNALWIRE_STATUS_WEBHOOK_URL || "",
       verifyWebhooks: normalizeVerifyMode(env.SIGNALWIRE_VERIFY_WEBHOOKS),
+      requestTimeoutMs: Math.min(Math.max(numberFromEnv(env.SIGNALWIRE_REQUEST_TIMEOUT_MS, 15000), 1), 60000),
       testTimeoutMs: numberFromEnv(env.TEST_TIMEOUT_MS, 120000),
       sayMessage:
         env.SIGNALWIRE_SAY_MESSAGE ||

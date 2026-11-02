@@ -90,6 +90,14 @@ export class EventStore {
     this.evaluateTest(test);
   }
 
+  markTestCallFailed(testId) {
+    const test = this.tests.get(testId);
+    if (!test) return;
+    test.callCreationFailed = true;
+    test.updatedAt = new Date().toISOString();
+    this.evaluateTest(test);
+  }
+
   listTests() {
     const now = Date.now();
     return [...this.tests.values()]
@@ -103,9 +111,16 @@ export class EventStore {
   }
 
   attachEventToTests(event) {
-    const explicitTestId = event.meta?.testId || event.payload?.test_id;
-    if (explicitTestId && this.tests.has(explicitTestId)) {
-      this.attachEventToTest(this.tests.get(explicitTestId), event);
+    // Only server-supplied SignalWire metadata carries an exact test ID.
+    // Placetel payload fields must always pass phone-number correlation.
+    const explicitTestId = event.type.startsWith("signalwire.") && event.meta?.testId;
+    if (explicitTestId) {
+      const test = this.tests.get(explicitTestId);
+      const payload = event.payload || {};
+      const callSid = payload.CallSid || payload.call_sid || payload.sid;
+      if (test && (!test.signalWireCallSid || callSid === test.signalWireCallSid)) {
+        this.attachEventToTest(test, event);
+      }
       return;
     }
 
@@ -117,6 +132,10 @@ export class EventStore {
   }
 
   attachEventToTest(test, event) {
+    if (!["starting", "pending"].includes(test.status)) return;
+    const receivedAt = new Date(event.receivedAt).getTime();
+    if (receivedAt < new Date(test.createdAt).getTime() ||
+        receivedAt > new Date(test.timeoutAt).getTime()) return;
     if (test.events.some((existing) => existing.id === event.id)) return;
 
     test.events.push(event);
@@ -130,7 +149,7 @@ export class EventStore {
 
     const payload = event.payload || {};
     if (
-      test.signalWireCallSid &&
+      event.type.startsWith("signalwire.") && test.signalWireCallSid &&
       (payload.CallSid === test.signalWireCallSid ||
         payload.call_sid === test.signalWireCallSid ||
         payload.sid === test.signalWireCallSid)
@@ -194,7 +213,11 @@ export class EventStore {
     test.missing = missing;
     test.ok = missing.length === 0;
 
-    if (test.ok) {
+    if (test.callCreationFailed) {
+      test.status = "failed";
+      test.reason = "SignalWire call creation failed.";
+      test.ok = false;
+    } else if (test.ok) {
       test.status = "ok";
       test.reason = "All required SignalWire and Placetel callbacks were received.";
     } else if (test.status !== "starting" && now > new Date(test.timeoutAt).getTime()) {

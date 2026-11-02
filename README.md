@@ -30,6 +30,7 @@ Fill in:
 - `SIGNALWIRE_BASE_URL`: the full SignalWire LaML API base URL, for example `https://{space}.signalwire.com/api/laml/2010-04-01`. This may point at a proxy.
 - `SIGNALWIRE_PROJECT_ID`
 - `SIGNALWIRE_TOKEN`
+- `SIGNALWIRE_REQUEST_TIMEOUT_MS`: call-creation request/response deadline in milliseconds, default `15000`, clamped to `1..60000`. Provider redirects are rejected and response bodies are capped at 256 KiB.
 - `SIGNALWIRE_SIGNING_KEY`: the SignalWire API Credentials signing key, used to verify direct inbound SignalWire webhooks.
 - `SIGNALWIRE_FROM`: a SignalWire-owned caller ID in E.164 format.
 - `DEFAULT_TO`: the Placetel number to call, in E.164 format.
@@ -69,6 +70,11 @@ SIGNALWIRE_STATUS_WEBHOOK_URL=https://proxy.example/signalwire/status
 
 Round-trip tests append `test_id` to both URLs automatically.
 
+SignalWire test IDs must agree with the observed call SID once it is known.
+Placetel events always use phone-number/time correlation; payload `test_id` or
+`CallSid` fields cannot bypass it. Callbacks after a test deadline do not turn a
+timed-out test into a pass. A provider request failure leaves the test failed.
+
 ## Docker
 
 Build the image:
@@ -85,6 +91,7 @@ npm test
 docker buildx build --platform linux/amd64 --pull --load \
   -t signalwire-placetel-tester:check .
 docker run --rm --platform linux/amd64 --network none \
+  --tmpfs /tmp:rw,nosuid,noexec,size=16m,mode=1777 \
   --mount "type=bind,source=$PWD/test,target=/app/test,readonly" \
   signalwire-placetel-tester:check node --test
 docker run --rm --platform linux/amd64 --network none \
@@ -123,6 +130,10 @@ To verify the Scout result:
 ```sh
 docker scout cves schumann/signalwire-tester:latest
 ```
+
+For an independent Claude Code security review, start with
+[SECURITY_REVIEW.md](SECURITY_REVIEW.md). [CLAUDE.md](CLAUDE.md) provides its entry
+point, and the brief includes reproductions, evidence, and unresolved limits.
 
 Run it with an env file:
 

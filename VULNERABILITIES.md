@@ -1,6 +1,44 @@
 # Security Review — signalwire-placetel-tester
 
-## Current review — 2026-11-02 (release 0.1.2)
+## Current recheck — 2026-11-02 (release 0.1.3)
+
+The fresh scan of release 0.1.2 and the fresh rebuilt candidate both report
+**0 critical, 0 high, 0 medium, 0 low, and 1 unspecified** finding. The sole
+remaining finding is the same musl `CVE-2026-107891` version-threshold mismatch
+documented below. The current Alpine security database still records r3 as fixed;
+Node 22.23.4 remains the latest Node 22 patch. No new actionable package CVE was
+identified. The base remains pinned; a build with `--pull --no-cache` rechecked
+the runtime packages instead of reusing their upgrade layer.
+
+This source recheck additionally fixes:
+
+- Invalid Placetel HMAC requests previously wrote untrusted payloads into event
+  and call history. They now return `401` without parsing or recording payloads.
+- Provider requests had no application deadline or response body cap. They now
+  time out across headers/body (default 15 s, configuration limited to 1..60000
+  ms), cap responses at 256 KiB, and reject redirects. Upstream message text is
+  no longer interpolated into logged errors. Network/size failures return `502`,
+  deadlines return `504`, and failed creation leaves the associated test failed.
+- Placetel payload `test_id` or `CallSid` fields could bypass phone matching.
+  Exact correlation now uses only SignalWire metadata from server routes and
+  requires agreement with a known call SID. Unknown explicit IDs do not fall
+  back to a different test.
+- Late callbacks could change timed-out tests into successes. Per-test callback
+  attachment now enforces its creation/deadline window and active state.
+- Importing `src/server.js` previously loaded `.env` even when tests supplied
+  their own configuration. Only actual server startup now loads that file.
+
+Validation passed: all 38 tests locally and in the amd64 scratch container,
+static checks of all 16 source/test/script files, and the actual server smoke test.
+The three correlation regression tests failed before the fixes and passed after.
+Container tests use `--network none`, dummy credentials, and a local fake provider;
+the live carrier path has not been rerun.
+
+See `SECURITY_REVIEW.md` and `CLAUDE.md` for the independent review handoff.
+The handoff explicitly identifies remaining retention/concurrency/proxy trust
+questions; this review does not claim all application risks are resolved.
+
+## Previous review — 2026-11-02 (release 0.1.2)
 
 Scope: all application source, Node security advisories, the published amd64
 image, the pinned Node base image, and the rebuilt scratch runtime. The app has
